@@ -35,6 +35,62 @@
       background: #475569;
     }
 
+    /* RGB Spinning Animation Keyframes */
+    @keyframes spinBorder {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* RGB Logo Glowing Container */
+    .rgb-logo-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5px;
+      border-radius: 0.85rem;
+      overflow: hidden;
+      box-shadow: 0 0 12px rgba(249, 115, 22, 0.4), 0 0 20px rgba(168, 85, 247, 0.3);
+    }
+
+    /* Rotating Conic Gradient Layer */
+    .rgb-logo-wrapper::before {
+      content: '';
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      background: conic-gradient(
+        from 0deg,
+        #f97316,
+        #eab308,
+        #10b981,
+        #06b6d4,
+        #3b82f6,
+        #8b5cf6,
+        #ec4899,
+        #f97316
+      );
+      animation: spinBorder 3.5s linear infinite;
+    }
+
+    /* Inner Badge Content Overlay */
+    .rgb-logo-inner {
+      position: relative;
+      z-index: 10;
+      background-color: #0f172a;
+      border-radius: 0.7rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #f97316;
+      transition: all 0.3s ease;
+    }
+
+    .rgb-logo-wrapper:hover {
+      box-shadow: 0 0 18px rgba(249, 115, 22, 0.7), 0 0 30px rgba(59, 130, 246, 0.6);
+    }
+
     /* CSS KHUSUS TAMPILAN CETAK / PRINT */
     @media print {
       body > *:not(#printArea) { 
@@ -72,10 +128,17 @@
   <header class="bg-slate-800/95 backdrop-blur border-b border-slate-700/80 sticky top-0 z-30 no-print shadow-md">
     <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-0">
       
-      <!-- LOGO & TITLE BAR -->
+      <!-- LOGO & TITLE BAR WITH ROTATING RGB GLOW EFFECT -->
       <div class="flex items-center justify-between w-full sm:w-auto">
         <div class="flex items-center gap-2.5 sm:gap-3">
-          <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-500 flex items-center justify-center font-bold text-lg sm:text-xl text-white shadow-lg shadow-orange-500/30">S</div>
+          
+          <!-- RGB ANIMATED LOGO BADGE -->
+          <div class="rgb-logo-wrapper">
+            <div class="rgb-logo-inner w-9 h-9 sm:w-10 sm:h-10 text-lg sm:text-xl">
+              S
+            </div>
+          </div>
+
           <div>
             <h1 class="font-bold text-base sm:text-lg text-orange-500 tracking-wide leading-tight">SIPENBER</h1>
             <p class="text-[10px] sm:text-xs text-slate-400">Sistem Penerimaan Berkas & Dokumen</p>
@@ -225,6 +288,8 @@
   <!-- AREA DOKUMEN CETAK TANDA TERIMA -->
   <div id="printArea" class="hidden"></div>
 
+  <!-- MODALS SECTION -->
+  
   <!-- MODAL: DYNAMIC PASSWORD VERIFICATION (ADMIN & PENERIMA) -->
   <div id="modalPassword" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 no-print">
     <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-sm w-full p-5 sm:p-6 shadow-2xl animate-in fade-in zoom-in duration-150">
