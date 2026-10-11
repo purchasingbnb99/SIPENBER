@@ -635,14 +635,11 @@
 
     window.onload = () => {
       loadSavedPasswords();
-      loadLocalData();
-
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetchDocumentsFromBackend();
-        fetchSamplesFromBackend();
-        fetchLogsFromBackend();
-      }
-
+      // Data backend tidak diambil/dipulihkan dari cache lokal sebelum login.
+      // Setelah autentikasi berhasil, data dibaca melalui POST bertoken.
+      documentsData = [];
+      samplesData = [];
+      logsData = [];
       setRoleState('penerima', false);
       renderTable();
       renderSampleTable();
@@ -676,29 +673,51 @@
       try { localStorage.removeItem(LOCAL_PASS_KEY); } catch (e) {}
     }
 
+    function isRoleSessionActive(role) {
+      if (role === 'admin') return isAdminLoggedIn && Boolean(adminSessionToken);
+      if (role === 'penerima') return isPenerimaLoggedIn && Boolean(penerimaSessionToken);
+      return false;
+    }
+
     function switchRole(role) {
+      if (role !== 'admin' && role !== 'penerima') return;
+
+      // Klik role yang sedang aktif tidak meminta password berulang-ulang.
+      // Jika token tidak ada, modal tetap dibuka agar pengguna login kembali.
+      if (role === currentRole && isRoleSessionActive(role)) {
+        closePasswordModal();
+        return;
+      }
+
+      // Beralih role selalu meminta password role tujuan.
+      // Token role sebelumnya akan dicabut oleh server setelah autentikasi baru berhasil.
       openPasswordModal(role);
     }
 
     function checkAuth() {
-      if (currentRole === 'admin' && isAdminLoggedIn) return true;
-      if (currentRole === 'penerima' && isPenerimaLoggedIn) return true;
+      if (isRoleSessionActive(currentRole)) return true;
 
-      showToast(`Silakan login sebagai ${currentRole === 'admin' ? 'Admin' : 'Penerima'} terlebih dahulu!`, 'warning');
+      // Pulihkan state lokal yang mungkin sudah kedaluwarsa sebelum meminta login.
+      setRoleState(currentRole, false);
+      showToast(`Silakan login sebagai ${currentRole === 'admin' ? 'Admin' : 'Staff/Penerima'} terlebih dahulu!`, 'warning');
       openPasswordModal(currentRole);
       return false;
     }
 
     function setRoleState(role, isLoggedIn = false) {
-      currentRole = role;
-      const isAdmin = role === 'admin';
+      currentRole = role === 'admin' ? 'admin' : 'penerima';
 
-      if (isAdmin) {
-        isAdminLoggedIn = isLoggedIn;
-      } else {
-        isPenerimaLoggedIn = isLoggedIn;
+      // Kebijakan satu role aktif per halaman: tidak ada sesi Admin dan Staff aktif bersamaan.
+      isAdminLoggedIn = Boolean(isLoggedIn && currentRole === 'admin');
+      isPenerimaLoggedIn = Boolean(isLoggedIn && currentRole === 'penerima');
+
+      if (!isLoggedIn) {
+        adminSessionToken = '';
+        penerimaSessionToken = '';
+        verifiedAdminPassword = '';
       }
 
+      const isAdmin = currentRole === 'admin';
       const activeLoggedIn = isAdmin ? isAdminLoggedIn : isPenerimaLoggedIn;
 
       const roleLabel = document.getElementById('roleLabel');
@@ -706,12 +725,12 @@
 
       if (roleLabel && activeRoleText) {
         if (activeLoggedIn) {
-          roleLabel.innerText = isAdmin ? 'Admin (Aktif)' : 'Penerima (Aktif)';
-          activeRoleText.className = isAdmin 
-            ? 'font-bold text-orange-400 flex items-center gap-1' 
+          roleLabel.innerText = isAdmin ? 'Admin (Aktif)' : 'Staff/Penerima (Aktif)';
+          activeRoleText.className = isAdmin
+            ? 'font-bold text-orange-400 flex items-center gap-1'
             : 'font-bold text-emerald-400 flex items-center gap-1';
         } else {
-          roleLabel.innerText = isAdmin ? 'Belum Login (Admin)' : 'Belum Login (Penerima)';
+          roleLabel.innerText = isAdmin ? 'Belum Login (Admin)' : 'Belum Login (Staff/Penerima)';
           activeRoleText.className = 'font-bold text-amber-400 flex items-center gap-1';
         }
       }
@@ -771,32 +790,49 @@
         return;
       }
 
-      const isTargetAdmin = targetPendingRole === 'admin';
+      const roleToLogin = targetPendingRole;
+      const isTargetAdmin = roleToLogin === 'admin';
+      // Kirim token sesi yang sedang aktif agar server dapat mencabutnya setelah login role baru sukses.
+      const previousToken = getSessionTokenForCurrentRole();
+      const submitButton = document.querySelector('#modalPassword button[onclick="submitPassword()"]');
+      if (submitButton) submitButton.disabled = true;
+
       try {
         const result = await safeFetchJson(GAS_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
-            token: getSessionTokenForCurrentRole(),
+            token: previousToken,
             action: isTargetAdmin ? 'verifyAdminPassword' : 'verifyPenerimaPassword',
             password: inputPass
           })
         });
         if (result && result.success === true && result.status === 'success' && result.token) {
+          // Hanya token role yang baru login yang dipertahankan di browser.
+          adminSessionToken = '';
+          penerimaSessionToken = '';
+          verifiedAdminPassword = '';
+          isAdminLoggedIn = false;
+          isPenerimaLoggedIn = false;
+
           if (isTargetAdmin) {
             verifiedAdminPassword = inputPass;
             adminSessionToken = result.token;
           } else {
             penerimaSessionToken = result.token;
           }
+
           closePasswordModal();
-          setRoleState(targetPendingRole, true);
-          showToast(`Berhasil masuk sebagai ${isTargetAdmin ? 'Admin' : 'Penerima'}`, 'success');
+          setRoleState(roleToLogin, true);
+          showToast(`Berhasil masuk sebagai ${isTargetAdmin ? 'Admin' : 'Staff/Penerima'}`, 'success');
+          await loadAuthenticatedData(result.token);
         } else {
           showToast((result && result.message) || 'Kata sandi salah!', 'error');
         }
       } catch (error) {
         showToast('Gagal menghubungi server untuk verifikasi login.', 'error');
+      } finally {
+        if (submitButton) submitButton.disabled = false;
       }
     }
 
@@ -827,48 +863,101 @@
       }
     }
 
-    function fetchDocumentsFromBackend() {
-      if (!GAS_API_URL || GAS_API_URL.trim() === "" || GAS_API_URL.includes("ISI_DENGAN_URL")) return;
-
-      safeFetchJson(`${GAS_API_URL}?action=getBerkas`)
-        .then(data => {
-          if (Array.isArray(data)) {
-            documentsData = sanitizeUniqueIds(data);
-            saveLocalDocs();
-            renderTable();
-            updateGasStatusBadge(true);
+    function backendPost(action, token, payload = {}) {
+      if (!GAS_API_URL || !GAS_API_URL.trim() || GAS_API_URL.includes('ISI_DENGAN_URL')) {
+        return Promise.reject(new Error('URL backend SIPENBER belum dikonfigurasi.'));
+      }
+      if (!token) {
+        return Promise.reject(new Error('Sesi login tidak tersedia. Silakan login ulang.'));
+      }
+      return safeFetchJson(GAS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, token, ...payload })
+      }).then(result => {
+        if (result && !Array.isArray(result) && (result.status === 'error' || result.success === false)) {
+          if (result.code === 'AUTH_REQUIRED') {
+            const roleToReauthenticate = currentRole;
+            setRoleState(roleToReauthenticate, false);
+            const passwordModal = document.getElementById('modalPassword');
+            if (passwordModal && passwordModal.classList.contains('hidden')) {
+              openPasswordModal(roleToReauthenticate);
+            }
           }
-        })
-        .catch(() => updateGasStatusBadge(false));
+          throw new Error(result.message || 'Permintaan ditolak oleh server.');
+        }
+        updateGasStatusBadge(true);
+        return result;
+      });
     }
 
-    function fetchSamplesFromBackend() {
-      if (!GAS_API_URL || GAS_API_URL.trim() === "" || GAS_API_URL.includes("ISI_DENGAN_URL")) return;
-
-      safeFetchJson(`${GAS_API_URL}?action=getSamples`)
-        .then(data => {
-          if (Array.isArray(data)) {
-            // FILTER HANYA DATA DENGAN STRUKTUR SAMPLE SAH
-            samplesData = sanitizeSampleData(data);
-            saveLocalSamples();
-            renderSampleTable();
-          }
-        })
-        .catch(() => {});
+    async function runBackendMutation(action, payload = {}, successMessage = '') {
+      try {
+        const result = await backendPost(action, getSessionTokenForCurrentRole(), payload);
+        if (!result || Array.isArray(result) || result.status !== 'success' || result.success === false) {
+          throw new Error((result && result.message) || 'Server tidak mengonfirmasi penyimpanan.');
+        }
+        if (successMessage) showToast(successMessage, 'success');
+        return true;
+      } catch (error) {
+        showToast(`Perubahan belum dapat dikonfirmasi: ${error.message || 'Kesalahan server'}`, 'error');
+        const token = getSessionTokenForCurrentRole();
+        // Muat ulang data yang menjadi sumber kebenaran agar perubahan optimistis yang gagal tidak menetap.
+        if (token) {
+          await Promise.all([
+            fetchDocumentsFromBackend(token).catch(() => false),
+            fetchSamplesFromBackend(token).catch(() => false),
+            fetchLogsFromBackend(token).catch(() => false)
+          ]);
+        }
+        return false;
+      }
     }
 
-    function fetchLogsFromBackend() {
-      if (!GAS_API_URL || GAS_API_URL.trim() === "" || GAS_API_URL.includes("ISI_DENGAN_URL")) return;
+    async function loadAuthenticatedData(token) {
+      try {
+        await Promise.all([
+          fetchDocumentsFromBackend(token),
+          fetchSamplesFromBackend(token),
+          fetchLogsFromBackend(token)
+        ]);
+        updateGasStatusBadge(true);
+        return true;
+      } catch (error) {
+        updateGasStatusBadge(false);
+        showToast('Login berhasil, tetapi data server gagal dimuat: ' + (error.message || 'Kesalahan tidak diketahui'), 'error');
+        return false;
+      }
+    }
 
-      safeFetchJson(`${GAS_API_URL}?action=getLogs`)
-        .then(data => {
-          if (Array.isArray(data)) {
-            logsData = data;
-            saveLocalLogs();
-            updateLogCountBadge();
-          }
-        })
-        .catch(() => {});
+    function fetchDocumentsFromBackend(token) {
+      return backendPost('getBerkas', token).then(data => {
+        if (!Array.isArray(data)) throw new Error('Respons data berkas dari server tidak valid.');
+        documentsData = sanitizeUniqueIds(data);
+        saveLocalDocs();
+        renderTable();
+        return true;
+      });
+    }
+
+    function fetchSamplesFromBackend(token) {
+      return backendPost('getSamples', token).then(data => {
+        if (!Array.isArray(data)) throw new Error('Respons data sample dari server tidak valid.');
+        samplesData = sanitizeSampleData(data);
+        saveLocalSamples();
+        renderSampleTable();
+        return true;
+      });
+    }
+
+    function fetchLogsFromBackend(token) {
+      return backendPost('getLogs', token).then(data => {
+        if (!Array.isArray(data)) throw new Error('Respons Logbook dari server tidak valid.');
+        logsData = data;
+        saveLocalLogs();
+        updateLogCountBadge();
+        return true;
+      });
     }
 
     function sanitizeUniqueIds(dataArray) {
@@ -1029,7 +1118,7 @@
       document.getElementById(`samplePreviewContainer${index}`).classList.add('hidden');
     }
 
-    function saveSampleRecord() {
+    async function saveSampleRecord() {
       if (!checkAuth()) return;
       if (currentRole !== 'admin') {
         showToast('Aksi ini hanya diperbolehkan untuk Admin!', 'error');
@@ -1077,15 +1166,7 @@
         `🧪 ${isEdit ? 'Mengubah' : 'Mencatat'} penyerahan sample "${namaBarang}" oleh ${penyerah} (${countPhotos} Foto terlampir)`
       );
 
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetch(GAS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'saveSample', sample: sampleItem })
-        }).catch(() => {});
-      }
-
-      showToast(isEdit ? 'Data sample diperbarui' : 'Sample berhasil dicatat', 'success');
+      await runBackendMutation('saveSample', { sample: sampleItem }, isEdit ? 'Data sample diperbarui' : 'Sample berhasil dicatat');
     }
 
     function deleteSampleRecord(id) {
@@ -1105,7 +1186,7 @@
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
         confirmButtonText: 'Ya, Hapus!'
-      }).then((result) => {
+      }).then(async (result) => {
         if (result.isConfirmed) {
           samplesData = samplesData.filter(s => s.id !== id);
           saveLocalSamples();
@@ -1113,15 +1194,7 @@
 
           addLogEntry('Hapus Sample', `🗑️ Menghapus data sample "${sample.namaBarang}" (${sample.namaPenyerah})`);
 
-          if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-            fetch(GAS_API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'deleteSample', id: id })
-            }).catch(() => {});
-          }
-
-          showToast('Data sample berhasil dihapus', 'success');
+          await runBackendMutation('deleteSample', { id: id }, 'Data sample berhasil dihapus');
         }
       });
     }
@@ -1311,7 +1384,7 @@
     // LOGIKA MODUL PENERIMAAN BERKAS & DOKUMEN
     // ==========================================
 
-    function saveEditDocument() {
+    async function saveEditDocument() {
       if (!checkAuth()) return;
 
       const id = document.getElementById('editDocId').value;
@@ -1373,15 +1446,7 @@
 
       addLogEntry('Edit Berkas', logDetails);
 
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetch(GAS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'updateDocumentDetails', id: id, document: updatedDoc })
-        }).catch(() => {});
-      }
-
-      showToast('Perubahan berkas berhasil disimpan!', 'success');
+      await runBackendMutation('updateDocumentDetails', { id: id, document: updatedDoc }, 'Perubahan berkas berhasil disimpan!');
     }
 
     function renderTable() {
@@ -1588,7 +1653,7 @@
       return doc;
     }
 
-    function saveBatchDocuments() {
+    async function saveBatchDocuments() {
       if (!checkAuth()) return;
 
       const container = document.getElementById('batchItemsContainer');
@@ -1631,16 +1696,10 @@
       const itemSummary = newItems.map(i => `• PO ${i.noPo} (${i.namaVendor}) Rp ${Number(i.nominal).toLocaleString('id-ID')}`).join('\n');
       addLogEntry('Input Berkas Batch', `➕ Menambahkan ${newItems.length} berkas penerimaan baru:\n${itemSummary}`);
 
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetch(GAS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'createBerkasBatch', items: newItems })
-        }).catch(() => {});
-      }
+      await runBackendMutation('createBerkasBatch', { items: newItems }, `${newItems.length} berkas berhasil disimpan.`);
     }
 
-    function toggleChecklistAll(date, shouldCheck) {
+    async function toggleChecklistAll(date, shouldCheck) {
       if (!checkAuth()) return;
 
       const docsToUpdate = documentsData.filter(d => d.tanggal === date && (!d.isLocked || currentRole === 'admin'));
@@ -1667,13 +1726,7 @@
         `☑️ Mengubah seluruh status (${docsToUpdate.length} berkas) tanggal ${date} menjadi: ${shouldCheck ? 'Selesai & Terkunci' : 'Belum Selesai'}`
       );
 
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetch(GAS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'updatePenerimaStatusBatch', updates: batchPayload })
-        }).catch(() => {});
-      }
+      await runBackendMutation('updatePenerimaStatusBatch', { updates: batchPayload });
     }
 
     function deleteDocument(targetId, targetPo) {
@@ -1692,7 +1745,7 @@
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
         confirmButtonText: 'Ya, Hapus!'
-      }).then((result) => {
+      }).then(async (result) => {
         if (result.isConfirmed) {
           documentsData = documentsData.filter(d => d.id !== doc.id);
           saveLocalDocs();
@@ -1700,14 +1753,7 @@
 
           addLogEntry('Hapus Berkas', `🗑️ Menghapus berkas PO ${doc.noPo || doc.po} (${doc.namaVendor || doc.vendor}) Nominal Rp ${Number(doc.nominal).toLocaleString('id-ID')}`);
 
-          if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-            fetch(GAS_API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'deleteDocument', id: doc.id, noPo: doc.noPo || doc.po })
-            }).catch(() => {});
-          }
-          showToast('Berkas berhasil dihapus', 'success');
+          await runBackendMutation('deleteDocument', { id: doc.id, noPo: doc.noPo || doc.po }, 'Berkas berhasil dihapus');
         }
       });
     }
@@ -1725,7 +1771,7 @@
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
         confirmButtonText: 'Ya, Hapus Semua!'
-      }).then((result) => {
+      }).then(async (result) => {
         if (result.isConfirmed) {
           const idsToDelete = docsForDate.map(d => d.id);
           const posToDelete = docsForDate.map(d => d.noPo || d.po);
@@ -1735,19 +1781,12 @@
 
           addLogEntry('Hapus Group Tanggal', `🗑️ Menghapus seluruh data (${docsForDate.length} berkas) pada tanggal ${date}`);
 
-          if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-            fetch(GAS_API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'deleteGroupDate', ids: idsToDelete, pos: posToDelete })
-            }).catch(() => {});
-          }
-          showToast(`Semua data tanggal ${date} berhasil dihapus`, 'success');
+          await runBackendMutation('deleteGroupDate', { ids: idsToDelete, pos: posToDelete }, `Semua data tanggal ${date} berhasil dihapus`);
         }
       });
     }
 
-    function toggleChecklist(targetId, targetPo, isChecked) {
+    async function toggleChecklist(targetId, targetPo, isChecked) {
       if (!checkAuth()) return;
 
       const doc = findDocByUniqueTarget(targetId, targetPo);
@@ -1760,23 +1799,15 @@
 
       addLogEntry('Ceklis Berkas', `☑️ Status Ceklis Berkas PO ${doc.noPo || doc.po} (${doc.namaVendor || doc.vendor}) diubah menjadi: ${isChecked ? 'SUDAH DICEKLIS & TERKUNCI' : 'BELUM DICEKLIS'}`);
 
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetch(GAS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            token: getSessionTokenForCurrentRole(),
-            action: 'updatePenerimaStatus',
-            id: doc.id,
-            noPo: doc.noPo || doc.po,
-            isCompleted: isChecked,
-            notes: doc.notes || ''
-          })
-        }).catch(() => {});
-      }
+      await runBackendMutation('updatePenerimaStatus', {
+        id: doc.id,
+        noPo: doc.noPo || doc.po,
+        isCompleted: isChecked,
+        notes: doc.notes || ''
+      });
     }
 
-    function updateNotes(targetId, targetPo, notes) {
+    async function updateNotes(targetId, targetPo, notes) {
       if (!checkAuth()) return;
 
       const doc = findDocByUniqueTarget(targetId, targetPo);
@@ -1787,24 +1818,16 @@
 
         addLogEntry('Update Catatan', `📝 Catatan PO ${doc.noPo || doc.po}: "${oldNote}" ➔ "${notes}"`);
 
-        if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-          fetch(GAS_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-              token: getSessionTokenForCurrentRole(),
-              action: 'updatePenerimaStatus',
-              id: doc.id,
-              noPo: doc.noPo || doc.po,
-              isCompleted: doc.isChecked,
-              notes: notes
-            })
-          }).catch(() => {});
-        }
+        await runBackendMutation('updatePenerimaStatus', {
+          id: doc.id,
+          noPo: doc.noPo || doc.po,
+          isCompleted: doc.isChecked,
+          notes: notes
+        });
       }
     }
 
-    function unlockDoc(targetId, targetPo) {
+    async function unlockDoc(targetId, targetPo) {
       if (!checkAuth()) return;
 
       const doc = findDocByUniqueTarget(targetId, targetPo);
@@ -1816,13 +1839,7 @@
 
       addLogEntry('Buka Kunci Dokumen', `🔓 Membuka kunci berkas PO ${doc.noPo || doc.po}`);
 
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetch(GAS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'unlockDocument', id: doc.id, noPo: doc.noPo || doc.po })
-        }).catch(() => {});
-      }
+      await runBackendMutation('unlockDocument', { id: doc.id, noPo: doc.noPo || doc.po }, 'Kunci berkas berhasil dibuka.');
     }
 
     function printReceipt(date) {
@@ -1955,11 +1972,15 @@
       updateLogCountBadge();
 
       if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetch(GAS_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'addLogbookEntry', logData: newLog })
-        }).catch(() => {});
+        backendPost('addLogbookEntry', getSessionTokenForCurrentRole(), { logData: newLog })
+          .then(result => {
+            if (!result || result.status !== 'success') throw new Error((result && result.message) || 'Logbook gagal disimpan.');
+          })
+          .catch(() => {
+            // Tidak menampilkan toast sukses untuk pencatatan log yang belum dikonfirmasi server.
+            const token = getSessionTokenForCurrentRole();
+            if (token) fetchLogsFromBackend(token).catch(() => false);
+          });
       }
     }
 
@@ -2019,7 +2040,7 @@
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
         confirmButtonText: 'Ya, Hapus!'
-      }).then((result) => {
+      }).then(async (result) => {
         if (result.isConfirmed) {
           if (targetIds.length > 0) {
             logsData = logsData.filter(l => !targetIds.includes(l.id));
@@ -2030,14 +2051,7 @@
           renderLogbookTable();
           updateLogCountBadge();
 
-          if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-            fetch(GAS_API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'clearLogbook', idsToDelete: targetIds })
-            }).catch(() => {});
-          }
-          showToast('Logbook dibersihkan', 'success');
+          await runBackendMutation('clearLogbook', { idsToDelete: targetIds }, 'Logbook berhasil dibersihkan');
         }
       });
     }
