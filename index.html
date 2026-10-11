@@ -612,8 +612,9 @@
     let isPenerimaLoggedIn = false;
     let targetPendingRole = 'penerima';
 
-    let adminPasswordVal = 'bnbzipper';
-    let penerimaPasswordVal = 'novita';
+    let adminPasswordVal = 'bnbzipper'; // fallback tampilan saja; validasi tetap di server
+    let penerimaPasswordVal = 'novita'; // fallback tampilan saja; validasi tetap di server
+    let verifiedAdminPassword = ''; // hanya di memori selama sesi halaman
 
     let documentsData = [];
     let samplesData = [];
@@ -665,14 +666,8 @@
     }
 
     function loadSavedPasswords() {
-      const saved = localStorage.getItem(LOCAL_PASS_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.admin) adminPasswordVal = parsed.admin;
-          if (parsed.penerima) penerimaPasswordVal = parsed.penerima;
-        } catch(e) {}
-      }
+      // Password tidak lagi dibaca dari localStorage; server adalah sumber kebenaran.
+      try { localStorage.removeItem(LOCAL_PASS_KEY); } catch (e) {}
     }
 
     function switchRole(role) {
@@ -762,19 +757,34 @@
       document.getElementById('modalPassword').classList.add('hidden');
     }
 
-    function submitPassword() {
+    async function submitPassword() {
       const inputPass = document.getElementById('inputAdminPassword').value.trim();
       if (!inputPass) return;
+      if (!GAS_API_URL || !GAS_API_URL.trim() || GAS_API_URL.includes('ISI_DENGAN_URL')) {
+        showToast('Server SIPENBER tidak terkonfigurasi. Login online tidak dapat diverifikasi.', 'error');
+        return;
+      }
 
       const isTargetAdmin = targetPendingRole === 'admin';
-      const expectedPass = isTargetAdmin ? adminPasswordVal : penerimaPasswordVal;
-
-      if (inputPass.toLowerCase() === expectedPass.toLowerCase()) {
-        closePasswordModal();
-        setRoleState(targetPendingRole, true);
-        showToast(`Berhasil masuk sebagai ${isTargetAdmin ? 'Admin' : 'Penerima'}`, 'success');
-      } else {
-        showToast('Kata sandi salah!', 'error');
+      try {
+        const result = await safeFetchJson(GAS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: isTargetAdmin ? 'verifyAdminPassword' : 'verifyPenerimaPassword',
+            password: inputPass
+          })
+        });
+        if (result && result.success === true && result.status === 'success') {
+          if (isTargetAdmin) verifiedAdminPassword = inputPass;
+          closePasswordModal();
+          setRoleState(targetPendingRole, true);
+          showToast(`Berhasil masuk sebagai ${isTargetAdmin ? 'Admin' : 'Penerima'}`, 'success');
+        } else {
+          showToast((result && result.message) || 'Kata sandi salah!', 'error');
+        }
+      } catch (error) {
+        showToast('Gagal menghubungi server untuk verifikasi login.', 'error');
       }
     }
 
@@ -2083,33 +2093,50 @@
       document.getElementById('modalChangePass').classList.add('hidden');
     }
 
-    function saveNewPassword() {
+    async function saveNewPassword() {
+      if (!checkAuth() || !isAdminLoggedIn || !verifiedAdminPassword) {
+        showToast('Silakan login ulang sebagai Admin sebelum mengganti password.', 'warning');
+        return;
+      }
       const role = document.getElementById('changePassRole').value;
       const newPass = document.getElementById('newPasswordInput').value.trim();
-
-      if (!newPass) {
-        showToast('Kata sandi baru tidak boleh kosong!', 'warning');
+      if (newPass.length < 6 || newPass.length > 128) {
+        showToast('Password baru harus terdiri dari 6 sampai 128 karakter.', 'warning');
+        return;
+      }
+      if (!GAS_API_URL || !GAS_API_URL.trim() || GAS_API_URL.includes('ISI_DENGAN_URL')) {
+        showToast('Server SIPENBER tidak terkonfigurasi. Password belum diubah.', 'error');
         return;
       }
 
-      if (role === 'admin') adminPasswordVal = newPass;
-      if (role === 'penerima') penerimaPasswordVal = newPass;
-
-      localStorage.setItem(LOCAL_PASS_KEY, JSON.stringify({
-        admin: adminPasswordVal,
-        penerima: penerimaPasswordVal
-      }));
-
-      closeChangePassModal();
-      showToast(`Password ${role.toUpperCase()} berhasil diubah!`, 'success');
-      addLogEntry('Ganti Password', `Mengubah kata sandi untuk role: ${role.toUpperCase()}`);
-
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        fetch(GAS_API_URL, {
+      try {
+        const result = await safeFetchJson(GAS_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'changePassword', targetRole: role, newPassword: newPass })
-        }).catch(() => {});
+          body: JSON.stringify({
+            action: 'changePassword',
+            targetRole: role,
+            currentAdminPassword: verifiedAdminPassword,
+            newPassword: newPass
+          })
+        });
+        if (!result || result.status !== 'success' || result.success !== true) {
+          showToast((result && result.message) || 'Password gagal diubah.', 'error');
+          return;
+        }
+
+        if (role === 'admin') {
+          adminPasswordVal = newPass;
+          verifiedAdminPassword = newPass;
+        } else {
+          penerimaPasswordVal = newPass;
+        }
+        closeChangePassModal();
+        document.getElementById('newPasswordInput').value = '';
+        showToast(`Password ${role.toUpperCase()} berhasil disimpan di server.`, 'success');
+        addLogEntry('Ganti Password', `Mengubah kata sandi untuk role: ${role.toUpperCase()}`);
+      } catch (error) {
+        showToast('Gagal menghubungi server. Password belum dapat dipastikan berubah.', 'error');
       }
     }
 
