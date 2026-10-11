@@ -1242,7 +1242,7 @@
 
     function openPhotoLightbox(sampleId) {
       const sample = samplesData.find(s => s.id === sampleId);
-      if (!sample || (!sample.fotoUrl && !sample.fotoUrl2)) return;
+      if (!sample || (!getSafeSamplePhotoSrc(sample.fotoUrl) && !getSafeSamplePhotoSrc(sample.fotoUrl2))) return;
 
       currentActiveLightboxSample = sample;
       document.getElementById('lightboxTitle').innerText = `${sample.namaBarang} (${sample.namaPenyerah})`;
@@ -1251,11 +1251,11 @@
       const btn2 = document.getElementById('btnLightboxPhoto2');
 
       if (btn1 && btn2) {
-        btn1.classList.toggle('hidden', !sample.fotoUrl);
-        btn2.classList.toggle('hidden', !sample.fotoUrl2);
+        btn1.classList.toggle('hidden', !getSafeSamplePhotoSrc(sample.fotoUrl));
+        btn2.classList.toggle('hidden', !getSafeSamplePhotoSrc(sample.fotoUrl2));
       }
 
-      if (sample.fotoUrl) {
+      if (getSafeSamplePhotoSrc(sample.fotoUrl)) {
         switchLightboxPhoto(1);
       } else {
         switchLightboxPhoto(2);
@@ -1272,7 +1272,7 @@
       const btn2 = document.getElementById('btnLightboxPhoto2');
 
       const targetSrc = photoIndex === 1 ? currentActiveLightboxSample.fotoUrl : currentActiveLightboxSample.fotoUrl2;
-      img.src = targetSrc || '';
+      img.src = getSafeSamplePhotoSrc(targetSrc);
 
       if (btn1 && btn2) {
         btn1.className = photoIndex === 1 ? 'px-3 py-1 rounded text-xs font-semibold bg-teal-600 text-white' : 'px-3 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white';
@@ -1322,18 +1322,18 @@
 
       let rowsHtml = '';
       filtered.forEach((item, index) => {
-        const photoCount = (item.fotoUrl ? 1 : 0) + (item.fotoUrl2 ? 1 : 0);
+        const photoCount = (getSafeSamplePhotoSrc(item.fotoUrl) ? 1 : 0) + (getSafeSamplePhotoSrc(item.fotoUrl2) ? 1 : 0);
 
         rowsHtml += `
           <tr class="hover:bg-slate-700/30 transition border-b border-slate-700/50">
             <td class="py-3 px-4 text-center text-xs font-semibold text-slate-500">${index + 1}</td>
-            <td class="py-3 px-4 font-bold text-teal-400 font-mono whitespace-nowrap">${item.tanggalPenyerahan}</td>
-            <td class="py-3 px-4 font-semibold text-slate-100">${item.namaPenyerah}</td>
-            <td class="py-3 px-4 font-medium text-teal-300">${item.namaBarang}</td>
-            <td class="py-3 px-4 text-xs text-slate-300">${item.keterangan || '-'}</td>
+            <td class="py-3 px-4 font-bold text-teal-400 font-mono whitespace-nowrap">${escapeHtml(item.tanggalPenyerahan)}</td>
+            <td class="py-3 px-4 font-semibold text-slate-100">${escapeHtml(item.namaPenyerah)}</td>
+            <td class="py-3 px-4 font-medium text-teal-300">${escapeHtml(item.namaBarang)}</td>
+            <td class="py-3 px-4 text-xs text-slate-300">${escapeHtml(item.keterangan || '-')}</td>
             <td class="py-3 px-4 text-center whitespace-nowrap">
               ${photoCount > 0 ? `
-                <button onclick="openPhotoLightbox('${item.id}')" class="px-2.5 py-1 bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-600 hover:text-white rounded-lg text-xs font-medium flex items-center gap-1.5 mx-auto transition">
+                <button onclick="openPhotoLightbox(${safeJsArg(item.id)})" class="px-2.5 py-1 bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-600 hover:text-white rounded-lg text-xs font-medium flex items-center gap-1.5 mx-auto transition">
                   <i class="fa-solid fa-image"></i> Lihat Foto (${photoCount})
                 </button>
               ` : `
@@ -1343,10 +1343,10 @@
             <td class="py-3 px-4 text-center whitespace-nowrap">
               ${isAdmin ? `
                 <div class="flex items-center justify-center gap-1.5">
-                  <button onclick="openEditSampleModal('${item.id}')" title="Edit Sample" class="px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded text-xs transition">
+                  <button onclick="openEditSampleModal(${safeJsArg(item.id)})" title="Edit Sample" class="px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded text-xs transition">
                     <i class="fa-solid fa-pen-to-square"></i>
                   </button>
-                  <button onclick="deleteSampleRecord('${item.id}')" title="Hapus Sample" class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white rounded text-xs transition">
+                  <button onclick="deleteSampleRecord(${safeJsArg(item.id)})" title="Hapus Sample" class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white rounded text-xs transition">
                     <i class="fa-solid fa-trash-can"></i>
                   </button>
                 </div>
@@ -1528,7 +1528,7 @@
       emptyState.classList.add('hidden');
       emptyState.classList.remove('flex');
 
-      const groups = {};
+      const groups = Object.create(null);
       filtered.forEach(item => {
         const dateKey = item.tanggal || 'Tanpa Tanggal';
         if (!groups[dateKey]) groups[dateKey] = [];
@@ -1552,26 +1552,26 @@
           rowsHtml += `
             <tr class="hover:bg-slate-700/30 transition border-b border-slate-700/50">
               <td class="py-3 px-4 text-center text-xs font-semibold text-slate-500">${index + 1}</td>
-              <td class="py-3 px-4 font-bold text-orange-400 font-mono">${poVal}</td>
-              <td class="py-3 px-4 font-medium text-slate-200">${item.namaVendor || item.vendor}</td>
+              <td class="py-3 px-4 font-bold text-orange-400 font-mono">${escapeHtml(poVal)}</td>
+              <td class="py-3 px-4 font-medium text-slate-200">${escapeHtml(item.namaVendor || item.vendor || '')}</td>
               <td class="py-3 px-4 font-mono text-emerald-400">Rp ${Number(item.nominal).toLocaleString('id-ID')}</td>
               <td class="py-3 px-4">
-                <input type="text" value="${item.notes || ''}" 
-                  onblur="updateNotes('${item.id}', '${poVal}', this.value)" 
+                <input type="text" value="${escapeHtml(item.notes || '')}" 
+                  onblur="updateNotes(${safeJsArg(item.id)}, ${safeJsArg(poVal)}, this.value)" 
                   ${(!activeLoggedIn || (isLocked && !isAdmin)) ? 'disabled' : ''}
                   placeholder="${!activeLoggedIn ? 'Verifikasi password...' : (isLocked && !isAdmin ? 'Terkunci' : 'Tambah catatan...')}"
                   class="w-full bg-slate-900/60 border border-slate-700/80 rounded px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-orange-500 disabled:opacity-50 disabled:bg-slate-800">
               </td>
               <td class="py-3 px-4 text-center">
                 <input type="checkbox" ${item.isChecked ? 'checked' : ''} 
-                  onchange="toggleChecklist('${item.id}', '${poVal}', this.checked)"
+                  onchange="toggleChecklist(${safeJsArg(item.id)}, ${safeJsArg(poVal)}, this.checked)"
                   ${(!activeLoggedIn || (isLocked && !isAdmin)) ? 'disabled' : ''}
                   class="w-4 h-4 accent-orange-500 rounded cursor-pointer disabled:cursor-not-allowed">
               </td>
               <td class="py-3 px-4 text-center">
                 <div class="flex items-center justify-center gap-1.5">
                   ${isAdmin && isLocked ? `
-                    <button onclick="unlockDoc('${item.id}', '${poVal}')" title="Buka Kunci" class="px-2 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded text-xs font-semibold flex items-center gap-1 transition">
+                    <button onclick="unlockDoc(${safeJsArg(item.id)}, ${safeJsArg(poVal)})" title="Buka Kunci" class="px-2 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded text-xs font-semibold flex items-center gap-1 transition">
                       <i class="fa-solid fa-lock-open"></i> Unlock
                     </button>
                   ` : `
@@ -1579,11 +1579,11 @@
                   `}
 
                   ${isAdmin ? `
-                    <button onclick="openEditModal('${item.id}', '${poVal}')" title="Edit Berkas" class="px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded text-xs transition">
+                    <button onclick="openEditModal(${safeJsArg(item.id)}, ${safeJsArg(poVal)})" title="Edit Berkas" class="px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded text-xs transition">
                       <i class="fa-solid fa-pen-to-square"></i>
                     </button>
 
-                    <button onclick="deleteDocument('${item.id}', '${poVal}')" title="Hapus Berkas" class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white rounded text-xs transition">
+                    <button onclick="deleteDocument(${safeJsArg(item.id)}, ${safeJsArg(poVal)})" title="Hapus Berkas" class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white rounded text-xs transition">
                       <i class="fa-solid fa-trash-can"></i>
                     </button>
                   ` : ''}
@@ -1601,7 +1601,7 @@
               </div>
               <div>
                 <div class="flex items-center gap-2">
-                  <h3 class="font-bold text-base text-white font-mono">${date}</h3>
+                  <h3 class="font-bold text-base text-white font-mono">${escapeHtml(date)}</h3>
                   <span class="bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded-full font-medium">${docs.length} Berkas</span>
                 </div>
                 <p class="text-xs text-slate-400 mt-0.5">
@@ -1612,21 +1612,21 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-              <button onclick="toggleChecklistAll('${date}', true)" class="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+              <button onclick="toggleChecklistAll(${safeJsArg(date)}, true)" class="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
                 <i class="fa-solid fa-check-double"></i> Ceklis Semua
               </button>
 
               ${isAdmin ? `
-                <button onclick="toggleChecklistAll('${date}', false)" class="px-3 py-1.5 bg-amber-600/20 text-amber-400 border border-amber-500/30 hover:bg-amber-600 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                <button onclick="toggleChecklistAll(${safeJsArg(date)}, false)" class="px-3 py-1.5 bg-amber-600/20 text-amber-400 border border-amber-500/30 hover:bg-amber-600 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
                   <i class="fa-solid fa-rotate-left"></i> Batal Ceklis Semua
                 </button>
 
-                <button onclick="deleteGroupDate('${date}')" class="px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                <button onclick="deleteGroupDate(${safeJsArg(date)})" class="px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
                   <i class="fa-solid fa-trash-can"></i> Hapus Tanggal
                 </button>
               ` : ''}
 
-              <button onclick="printReceipt('${date}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-blue-600/30 transition">
+              <button onclick="printReceipt(${safeJsArg(date)})" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-blue-600/30 transition">
                 <i class="fa-solid fa-print"></i> Cetak Tanda Terima
               </button>
             </div>
@@ -1896,10 +1896,10 @@
         rowsHtml += `
           <tr>
             <td style="text-align: center;">${idx + 1}</td>
-            <td><strong>${doc.noPo || doc.po}</strong></td>
-            <td>${doc.namaVendor || doc.vendor}</td>
+            <td><strong>${escapeHtml(doc.noPo || doc.po || '')}</strong></td>
+            <td>${escapeHtml(doc.namaVendor || doc.vendor || '')}</td>
             <td style="text-align: right;">Rp ${Number(doc.nominal).toLocaleString('id-ID')}</td>
-            <td>${doc.notes || '-'}</td>
+            <td>${escapeHtml(doc.notes || '-')}</td>
             <td style="text-align: center;">${doc.isChecked ? 'SUDAH' : 'BELUM'}</td>
           </tr>
         `;
@@ -1913,7 +1913,7 @@
               <p style="margin: 4px 0 0 0; font-size: 12px; color: #333;">SIPENBER - Sistem Penerimaan Berkas</p>
             </div>
             <div style="text-align: right;">
-              <h3 style="margin: 0; font-size: 14px; color: #000;">TANGGAL: ${date}</h3>
+              <h3 style="margin: 0; font-size: 14px; color: #000;">TANGGAL: ${escapeHtml(date)}</h3>
               <p style="margin: 4px 0 0 0; font-size: 11px; color: #333;">Total Berkas: ${docsForDate.length}</p>
             </div>
           </div>
@@ -2027,6 +2027,25 @@
       }[char]));
     }
 
+
+    // Encode untrusted strings for use as arguments in quoted inline handlers.
+    // HTML escaping is applied after JS string encoding so quotes cannot break the attribute.
+    function safeJsArg(value) {
+      const jsLiteral = JSON.stringify(String(value == null ? '' : value))
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026');
+      return escapeHtml(jsLiteral);
+    }
+
+
+    // Sample photos are created as Base64 data URLs by the upload/compression flow.
+    // Reject arbitrary URL schemes and SVG content from stored or edited spreadsheet values.
+    function getSafeSamplePhotoSrc(value) {
+      const src = String(value || '').trim();
+      return /^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(src) ? src : '';
+    }
+
     function renderLogbookTable() {
       const tbody = document.getElementById('logbookTableBody');
       const roleFilter = document.getElementById('logRoleFilter').value;
@@ -2036,7 +2055,7 @@
 
       const filtered = logsData.filter(log => {
         const matchRole = !roleFilter || log.role === roleFilter;
-        const matchSearch = !searchVal || log.details.toLowerCase().includes(searchVal) || log.action.toLowerCase().includes(searchVal);
+        const matchSearch = !searchVal || String(log.details || '').toLowerCase().includes(searchVal) || String(log.action || '').toLowerCase().includes(searchVal);
         return matchRole && matchSearch;
       });
 
@@ -2070,7 +2089,7 @@
       if (roleFilter || searchFilter) {
         const filtered = logsData.filter(log => {
           const matchRole = !roleFilter || log.role === roleFilter;
-          const matchSearch = !searchFilter || log.details.toLowerCase().includes(searchFilter) || log.action.toLowerCase().includes(searchFilter);
+          const matchSearch = !searchFilter || String(log.details || '').toLowerCase().includes(searchFilter) || String(log.action || '').toLowerCase().includes(searchFilter);
           return matchRole && matchSearch;
         });
         targetIds = filtered.map(l => l.id);
