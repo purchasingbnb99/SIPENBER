@@ -16,7 +16,6 @@
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     body { font-family: 'Inter', sans-serif; }
 
-    /* CSS ANIMASI LOGO RGB BERPUTAR */
     @keyframes spinBorder {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
@@ -48,14 +47,7 @@
       width: 170%;
       height: 170%;
       background: conic-gradient(
-        #f97316, 
-        #eab308, 
-        #10b981, 
-        #06b6d4, 
-        #3b82f6, 
-        #a855f7, 
-        #ec4899, 
-        #f97316
+        #f97316, #eab308, #10b981, #06b6d4, #3b82f6, #a855f7, #ec4899, #f97316
       );
       animation: spinBorder 3.5s linear infinite;
     }
@@ -426,7 +418,7 @@
     </div>
   </div>
 
-  <!-- MODAL: CATAT / EDIT SAMPLE (ADMIN ONLY, 2 FOTO SUPPORT) -->
+  <!-- MODAL: CATAT / EDIT SAMPLE (ADMIN ONLY) -->
   <div id="modalSampleForm" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 no-print">
     <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full p-6 shadow-2xl flex flex-col max-h-[90vh]">
       <div class="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
@@ -471,7 +463,7 @@
           </div>
         </div>
 
-        <!-- UPLOAD FOTO 2 (DETAIL/OPSIONAL) -->
+        <!-- UPLOAD FOTO 2 (DETAIL) -->
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Foto 2 (Detail / Opsional)</label>
           <input type="file" id="sampleFileInput2" accept="image/*" onchange="previewSampleImage(this, 2)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600">
@@ -491,7 +483,7 @@
     </div>
   </div>
 
-  <!-- LIGHTBOX PREVIEW FOTO SAMPLE (MULTI-FOTO VIEWER) -->
+  <!-- LIGHTBOX PREVIEW FOTO SAMPLE -->
   <div id="modalPhotoLightbox" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex flex-col items-center justify-center p-4 no-print">
     <div class="relative max-w-4xl w-full flex flex-col items-center">
       <div class="w-full flex items-center justify-between mb-3 text-slate-200">
@@ -500,7 +492,6 @@
           <span id="lightboxTitle" class="font-bold text-sm">Foto Physical Sample</span>
         </div>
         
-        <!-- SWITCH FOTO 1 / FOTO 2 BUTTONS -->
         <div id="lightboxSwitchContainer" class="flex items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700">
           <button id="btnLightboxPhoto1" onclick="switchLightboxPhoto(1)" class="px-3 py-1 rounded text-xs font-semibold bg-teal-600 text-white">Foto 1 (Utama)</button>
           <button id="btnLightboxPhoto2" onclick="switchLightboxPhoto(2)" class="px-3 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white">Foto 2 (Detail)</button>
@@ -591,7 +582,7 @@
           <option value="admin">Admin</option>
           <option value="penerima">Penerima</option>
         </select>
-        <input type="text" id="logSearch" oninput="renderLogbookTable()" placeholder="Cari aktivitas atau nomor PO..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200">
+        <input type="text" id="logSearch" oninput="renderLogbookTable()" placeholder="Cari aktivitas..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200">
         <button id="btnClearLog" onclick="clearLogbookData()" class="hidden px-3 py-1.5 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white text-xs font-medium transition">
           <i class="fa-solid fa-trash-can mr-1"></i> Bersihkan Log
         </button>
@@ -604,7 +595,7 @@
               <th class="py-2.5 px-3">WAKTU</th>
               <th class="py-2.5 px-3">ROLE</th>
               <th class="py-2.5 px-3">AKSI</th>
-              <th class="py-2.5 px-3">DETAIL ACTIVITY (RINCIAN REVISI)</th>
+              <th class="py-2.5 px-3">DETAIL ACTIVITY</th>
             </tr>
           </thead>
           <tbody id="logbookTableBody" class="divide-y divide-slate-700/50"></tbody>
@@ -615,7 +606,7 @@
 
   <!-- APPLICATION LOGIC JS -->
   <script>
-    let activeModule = 'berkas'; // 'berkas' | 'sample'
+    let activeModule = 'berkas';
     let currentRole = 'penerima';
     let isAdminLoggedIn = false;
     let isPenerimaLoggedIn = false;
@@ -795,7 +786,7 @@
             return JSON.parse(text);
           } catch (err) {
             updateGasStatusBadge(false);
-            throw new Error('Respon dari server bukan format JSON yang valid.');
+            throw new Error('Respon server bukan JSON valid');
           }
         });
     }
@@ -826,9 +817,7 @@
             updateGasStatusBadge(true);
           }
         })
-        .catch(err => {
-          updateGasStatusBadge(false);
-        });
+        .catch(() => updateGasStatusBadge(false));
     }
 
     function fetchSamplesFromBackend() {
@@ -837,7 +826,8 @@
       safeFetchJson(`${GAS_API_URL}?action=getSamples`)
         .then(data => {
           if (Array.isArray(data)) {
-            samplesData = data;
+            // FILTER HANYA DATA DENGAN STRUKTUR SAMPLE SAH
+            samplesData = sanitizeSampleData(data);
             saveLocalSamples();
             renderSampleTable();
           }
@@ -881,6 +871,24 @@
           tanggal: formatDateString(item.tanggal)
         };
       });
+    }
+
+    // MEMASTIKAN DATA SAMPLE TIDAK TERTUKAR DENGAN DATA BERKAS
+    function sanitizeSampleData(dataArray) {
+      if (!Array.isArray(dataArray)) return [];
+
+      return dataArray.filter(item => {
+        // Cek apakah data ini benar-benar data sample (bukan data berkas PO)
+        return item && (item.namaPenyerah || item.namaBarang || item.tanggalPenyerahan);
+      }).map(item => ({
+        id: item.id || ('SMP-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)),
+        tanggalPenyerahan: formatDateString(item.tanggalPenyerahan || item.tanggal),
+        namaPenyerah: item.namaPenyerah || '-',
+        namaBarang: item.namaBarang || '-',
+        keterangan: item.keterangan || '-',
+        fotoUrl: item.fotoUrl || '',
+        fotoUrl2: item.fotoUrl2 || ''
+      }));
     }
 
     // ==========================================
@@ -958,7 +966,6 @@
       if (input.files && input.files[0]) {
         const reader = new FileReader();
         reader.onload = (e) => {
-          // Canvas compression untuk menghemat memori
           const img = new Image();
           img.onload = () => {
             const canvas = document.createElement('canvas');
@@ -1102,7 +1109,6 @@
       if (!sample || (!sample.fotoUrl && !sample.fotoUrl2)) return;
 
       currentActiveLightboxSample = sample;
-
       document.getElementById('lightboxTitle').innerText = `${sample.namaBarang} (${sample.namaPenyerah})`;
 
       const btn1 = document.getElementById('btnLightboxPhoto1');
@@ -1151,7 +1157,10 @@
 
       updateFilterSampleDateOptions();
 
-      const filtered = samplesData.filter(sample => {
+      // FILTER HANYA DATA SAMPLE SAH (HINDARI PENYUSUPAN DATA BERKAS)
+      const validSamples = samplesData.filter(s => s && s.namaPenyerah && s.namaPenyerah !== 'undefined');
+
+      const filtered = validSamples.filter(sample => {
         const penyerah = (sample.namaPenyerah || '').toLowerCase();
         const barang = (sample.namaBarang || '').toLowerCase();
         const ket = (sample.keterangan || '').toLowerCase();
@@ -1246,20 +1255,23 @@
     }
 
     function updateSampleStats() {
-      document.getElementById('statTotalSample').innerText = samplesData.length;
-      document.getElementById('statWithPhotoSample').innerText = samplesData.filter(s => s.fotoUrl || s.fotoUrl2).length;
+      const validSamples = samplesData.filter(s => s && s.namaPenyerah && s.namaPenyerah !== 'undefined');
 
-      const uniqueSenders = new Set(samplesData.map(s => s.namaPenyerah).filter(Boolean));
+      document.getElementById('statTotalSample').innerText = validSamples.length;
+      document.getElementById('statWithPhotoSample').innerText = validSamples.filter(s => s.fotoUrl || s.fotoUrl2).length;
+
+      const uniqueSenders = new Set(validSamples.map(s => s.namaPenyerah).filter(Boolean));
       document.getElementById('statSendersSample').innerText = uniqueSenders.size;
 
-      const uniqueDates = new Set(samplesData.map(s => s.tanggalPenyerahan).filter(Boolean));
+      const uniqueDates = new Set(validSamples.map(s => s.tanggalPenyerahan).filter(Boolean));
       document.getElementById('statDatesSample').innerText = uniqueDates.size;
     }
 
     function updateFilterSampleDateOptions() {
       const select = document.getElementById('filterSampleDate');
       const currentVal = select.value;
-      const uniqueDates = [...new Set(samplesData.map(s => s.tanggalPenyerahan))].filter(Boolean);
+      const validSamples = samplesData.filter(s => s && s.namaPenyerah && s.namaPenyerah !== 'undefined');
+      const uniqueDates = [...new Set(validSamples.map(s => s.tanggalPenyerahan))].filter(Boolean);
 
       uniqueDates.sort((a, b) => parseDateToComparable(a) - parseDateToComparable(b));
 
@@ -2108,7 +2120,7 @@
           <div class="text-left text-xs text-slate-300 space-y-2">
             <p><strong>Aplikasi SIPENBER terhubung dengan Google Apps Script Backend.</strong></p>
             <p>• Jika muncul badge <span class="text-emerald-400 font-semibold">GAS Terhubung</span>: Data disinkronkan secara real-time ke Google Sheets.</p>
-            <p>• Jika muncul badge <span class="text-amber-400 font-semibold">Lokal Mode</span>: Data disimpan sementara di LocalStorage browser dan akan otomatis terkirim saat server terhubung kembali.</p>
+            <p>• Jika muncul badge <span class="text-amber-400 font-semibold">Lokal Mode</span>: Data disimpan sementara di LocalStorage browser.</p>
           </div>
         `,
         icon: 'info',
@@ -2133,10 +2145,17 @@
       if (savedDocs) {
         try { documentsData = sanitizeUniqueIds(JSON.parse(savedDocs)); } catch (e) { documentsData = []; }
       }
+      
       const savedSamples = localStorage.getItem(LOCAL_SAMPLES_KEY);
       if (savedSamples) {
-        try { samplesData = JSON.parse(savedSamples); } catch (e) { samplesData = []; }
+        try { 
+          // PEMSIHAN LOGIKA LOKAL SUPAYA HANYA MEMUAT DATA SAMPLE ASLI
+          samplesData = sanitizeSampleData(JSON.parse(savedSamples)); 
+        } catch (e) { 
+          samplesData = []; 
+        }
       }
+      
       const savedLogs = localStorage.getItem(LOCAL_LOGS_KEY);
       if (savedLogs) {
         try { logsData = JSON.parse(savedLogs); } catch (e) { logsData = []; }
