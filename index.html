@@ -83,17 +83,19 @@
     .sample-modal-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
     #sampleKode { box-sizing: border-box; outline: none !important; box-shadow: none; }
     #sampleKode:focus { outline: none !important; border-color: #0d9488; box-shadow: 0 0 0 1px rgba(13,148,136,.35); }
-    .sample-dashboard-table { width: 100%; min-width: 1320px; table-layout: fixed; border-collapse: collapse; }
+    .sample-dashboard-table { width: 100%; min-width: 1490px; table-layout: fixed; border-collapse: collapse; }
     .sample-dashboard-table th, .sample-dashboard-table td { overflow-wrap: anywhere; vertical-align: top; }
-    .sample-dashboard-table th:nth-child(1), .sample-dashboard-table td:nth-child(1) { width: 48px; }
-    .sample-dashboard-table th:nth-child(2), .sample-dashboard-table td:nth-child(2) { width: 155px; }
-    .sample-dashboard-table th:nth-child(3), .sample-dashboard-table td:nth-child(3) { width: 150px; }
-    .sample-dashboard-table th:nth-child(4), .sample-dashboard-table td:nth-child(4) { width: 205px; }
-    .sample-dashboard-table th:nth-child(5), .sample-dashboard-table td:nth-child(5) { width: 185px; }
-    .sample-dashboard-table th:nth-child(6), .sample-dashboard-table td:nth-child(6) { width: 135px; }
-    .sample-dashboard-table th:nth-child(7), .sample-dashboard-table td:nth-child(7) { width: 340px; }
-    .sample-dashboard-table th:nth-child(8), .sample-dashboard-table td:nth-child(8) { width: 125px; }
-    .sample-dashboard-table th:nth-child(9), .sample-dashboard-table td:nth-child(9) { width: 105px; }
+    .sample-dashboard-table th:nth-child(1), .sample-dashboard-table td:nth-child(1) { width: 42px; }
+    .sample-dashboard-table th:nth-child(2), .sample-dashboard-table td:nth-child(2) { width: 48px; }
+    .sample-dashboard-table th:nth-child(3), .sample-dashboard-table td:nth-child(3) { width: 155px; }
+    .sample-dashboard-table th:nth-child(4), .sample-dashboard-table td:nth-child(4) { width: 150px; }
+    .sample-dashboard-table th:nth-child(5), .sample-dashboard-table td:nth-child(5) { width: 205px; }
+    .sample-dashboard-table th:nth-child(6), .sample-dashboard-table td:nth-child(6) { width: 185px; }
+    .sample-dashboard-table th:nth-child(7), .sample-dashboard-table td:nth-child(7) { width: 135px; }
+    .sample-dashboard-table th:nth-child(8), .sample-dashboard-table td:nth-child(8) { width: 340px; }
+    .sample-dashboard-table th:nth-child(9), .sample-dashboard-table td:nth-child(9) { width: 125px; }
+    .sample-dashboard-table th:nth-child(10), .sample-dashboard-table td:nth-child(10) { width: 105px; }
+    .sample-print-checkbox { width: 15px; height: 15px; accent-color: #0d9488; cursor: pointer; }
     .sample-note-preview { overflow-wrap: anywhere; word-break: normal; white-space: normal; }
     .sample-pair-label { display:block; margin-bottom:2px; font-size:9px; line-height:1.25; font-weight:700; letter-spacing:.04em; color:#94a3b8; text-transform:uppercase; }
 
@@ -699,6 +701,8 @@
     let documentsData = [];
     let samplesData = [];
     let logsData = [];
+    // ID sample yang dipilih pengguna khusus untuk proses cetak.
+    let selectedSamplePrintIds = new Set();
 
     let currentActiveLightboxSample = null;
 
@@ -1492,6 +1496,9 @@
 
         rowsHtml += `
           <tr class="hover:bg-slate-700/30 transition border-b border-slate-700/50">
+            <td class="py-3 px-3 text-center align-middle">
+              <input type="checkbox" class="sample-print-checkbox" aria-label="Pilih sample ${escapeHtml(kodeSample)} untuk dicetak" title="Pilih sample ini untuk dicetak" onchange="toggleSamplePrintSelection(${safeJsArg(item.id)}, this.checked)" ${selectedSamplePrintIds.has(String(item.id)) ? 'checked' : ''}>
+            </td>
             <td class="py-3 px-3 text-center text-xs font-semibold text-slate-500">${index + 1}</td>
             <td class="py-3 px-3">
               <span class="block font-bold text-teal-300 font-mono text-xs">${escapeHtml(kodeSample)}</span>
@@ -1532,14 +1539,22 @@
       });
 
       container.innerHTML = `
-        <div class="bg-slate-900/90 px-5 py-3 border-b border-slate-700 flex items-center justify-between">
+        <div class="bg-slate-900/90 px-5 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-2"><i class="fa-solid fa-vial text-teal-400"></i><h3 class="font-bold text-sm text-white">Daftar Penyerahan Sample Barang</h3></div>
-          <span class="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-teal-500/30">${filtered.length} Sample</span>
+          <div class="flex items-center flex-wrap gap-3">
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none" title="Pilih atau batalkan semua data sesuai filter saat ini">
+              <input id="sampleSelectAllFiltered" type="checkbox" class="sample-print-checkbox" aria-label="Pilih semua hasil filter" onchange="toggleAllFilteredSamplePrintSelection(this.checked)">
+              <span>Pilih semua hasil filter</span>
+            </label>
+            <span id="sampleSelectionCountBadge" class="bg-slate-700 text-slate-300 text-xs px-2.5 py-0.5 rounded-full font-semibold">0 dipilih</span>
+            <span class="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-teal-500/30">${filtered.length} Sample</span>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="sample-dashboard-table w-full text-left text-sm text-slate-300">
             <thead class="bg-slate-900/50 uppercase text-[11px] font-semibold text-slate-400 border-b border-slate-700/80">
               <tr>
+                <th class="py-3 px-3 text-center" title="Pilih data untuk dicetak"><i class="fa-solid fa-print" aria-hidden="true"></i></th>
                 <th class="py-3 px-3 text-center">NO</th>
                 <th class="py-3 px-3">KODE / TANGGAL</th>
                 <th class="py-3 px-3">NAMA PENYERAH</th>
@@ -1554,7 +1569,51 @@
             <tbody class="divide-y divide-slate-700/50">${rowsHtml}</tbody>
           </table>
         </div>`;
+      syncSamplePrintSelectionUI(filtered);
       updateSampleStats();
+    }
+
+    function getValidSamplesForPrintSelection() {
+      return samplesData.filter(sample => sample && sample.namaPenyerah && sample.namaPenyerah !== 'undefined' && sample.id != null && String(sample.id) !== '');
+    }
+
+    function toggleSamplePrintSelection(sampleId, isChecked) {
+      const id = String(sampleId == null ? '' : sampleId);
+      if (!id) return;
+      if (isChecked) selectedSamplePrintIds.add(id);
+      else selectedSamplePrintIds.delete(id);
+      rerenderSampleTablePreservingScroll();
+    }
+
+    function toggleAllFilteredSamplePrintSelection(isChecked) {
+      getFilteredSamplesForActions().forEach(sample => {
+        const id = String(sample.id == null ? '' : sample.id);
+        if (!id) return;
+        if (isChecked) selectedSamplePrintIds.add(id);
+        else selectedSamplePrintIds.delete(id);
+      });
+      rerenderSampleTablePreservingScroll();
+    }
+
+    function rerenderSampleTablePreservingScroll() {
+      const currentScroller = document.querySelector('#sampleTableContainer .overflow-x-auto');
+      const savedScrollLeft = currentScroller ? currentScroller.scrollLeft : 0;
+      renderSampleTable();
+      const nextScroller = document.querySelector('#sampleTableContainer .overflow-x-auto');
+      if (nextScroller) nextScroller.scrollLeft = savedScrollLeft;
+    }
+
+    function syncSamplePrintSelectionUI(filteredSamples) {
+      const visibleIds = filteredSamples.map(sample => String(sample.id == null ? '' : sample.id)).filter(Boolean);
+      const selectedVisible = visibleIds.filter(id => selectedSamplePrintIds.has(id)).length;
+      const allBox = document.getElementById('sampleSelectAllFiltered');
+      if (allBox) {
+        allBox.checked = visibleIds.length > 0 && selectedVisible === visibleIds.length;
+        allBox.indeterminate = selectedVisible > 0 && selectedVisible < visibleIds.length;
+      }
+      const selectedCount = getValidSamplesForPrintSelection().filter(sample => selectedSamplePrintIds.has(String(sample.id))).length;
+      const badge = document.getElementById('sampleSelectionCountBadge');
+      if (badge) badge.textContent = `${selectedCount} dipilih`;
     }
 
     function viewSampleDetails(sampleId) {
@@ -1624,9 +1683,53 @@
 
     function printSampleReport() {
       if (!checkAuth()) return;
-      const rows = getFilteredSamplesForActions();
-      if (!rows.length) {
+      const filteredRows = getFilteredSamplesForActions();
+      const selectedRows = getValidSamplesForPrintSelection().filter(sample => selectedSamplePrintIds.has(String(sample.id)));
+
+      if (selectedRows.length > 0) {
+        Swal.fire({
+          title: 'Pilih data yang akan dicetak',
+          html: `Terdapat <b>${selectedRows.length}</b> sample yang dipilih.<br>Hasil filter saat ini: <b>${filteredRows.length}</b> sample.`,
+          icon: 'question',
+          showCancelButton: true,
+          showDenyButton: true,
+          confirmButtonText: `Cetak pilihan (${selectedRows.length})`,
+          denyButtonText: `Cetak semua hasil filter (${filteredRows.length})`,
+          cancelButtonText: 'Batal',
+          confirmButtonColor: '#4f46e5',
+          denyButtonColor: '#475569',
+          reverseButtons: true
+        }).then(result => {
+          if (result.isConfirmed) printSampleRows(selectedRows);
+          else if (result.isDenied) {
+            if (!filteredRows.length) showToast('Tidak ada data sesuai filter untuk dicetak.', 'warning');
+            else printSampleRows(filteredRows);
+          }
+        });
+        return;
+      }
+
+      if (!filteredRows.length) {
         showToast('Tidak ada data sample sesuai filter untuk dicetak.', 'warning');
+        return;
+      }
+
+      Swal.fire({
+        title: 'Cetak semua sample?',
+        html: `Belum ada sample yang dipilih.<br>Cetak semua <b>${filteredRows.length}</b> sample sesuai filter saat ini?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Cetak semua',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#4f46e5'
+      }).then(result => {
+        if (result.isConfirmed) printSampleRows(filteredRows);
+      });
+    }
+
+    function printSampleRows(rows) {
+      if (!Array.isArray(rows) || !rows.length) {
+        showToast('Tidak ada data sample untuk dicetak.', 'warning');
         return;
       }
 
