@@ -705,6 +705,8 @@
     let selectedSamplePrintIds = new Set();
 
     let currentActiveLightboxSample = null;
+    let activeLightboxPhotoIndex = 1;
+    const samplePhotoCache = new Map();
 
     const LOCAL_DOCS_KEY = 'SIPENBER_DOCS_DATA_V2';
     const LOCAL_SAMPLES_KEY = 'SIPENBER_SAMPLES_DATA_V2';
@@ -890,6 +892,7 @@
           adminSessionToken = '';
           penerimaSessionToken = '';
           verifiedAdminPassword = '';
+          samplePhotoCache.clear();
           isAdminLoggedIn = false;
           isPenerimaLoggedIn = false;
 
@@ -1163,18 +1166,20 @@
       document.getElementById('sampleTujuan').value = sample.tujuan || '';
       document.getElementById('sampleStatus').value = sample.statusPenyerahan || 'Sudah Diserahkan';
 
-      if (sample.fotoUrl) {
+      if (hasSamplePhoto(sample.fotoUrl)) {
         document.getElementById('sampleFotoUrl1').value = sample.fotoUrl;
-        document.getElementById('samplePreviewImg1').src = sample.fotoUrl;
         document.getElementById('samplePreviewContainer1').classList.remove('hidden');
+        document.getElementById('samplePreviewImg1').src = getSafeSamplePhotoSrc(sample.fotoUrl) || '';
+        if (isDriveSamplePhotoRef(sample.fotoUrl)) loadSamplePhotoPreview(sample, 1, sample.fotoUrl);
       } else {
         removeSampleImage(1);
       }
 
-      if (sample.fotoUrl2) {
+      if (hasSamplePhoto(sample.fotoUrl2)) {
         document.getElementById('sampleFotoUrl2').value = sample.fotoUrl2;
-        document.getElementById('samplePreviewImg2').src = sample.fotoUrl2;
         document.getElementById('samplePreviewContainer2').classList.remove('hidden');
+        document.getElementById('samplePreviewImg2').src = getSafeSamplePhotoSrc(sample.fotoUrl2) || '';
+        if (isDriveSamplePhotoRef(sample.fotoUrl2)) loadSamplePhotoPreview(sample, 2, sample.fotoUrl2);
       } else {
         removeSampleImage(2);
       }
@@ -1396,43 +1401,139 @@
       }
     }
 
-    function openPhotoLightbox(sampleId) {
-      const sample = samplesData.find(s => s.id === sampleId);
-      if (!sample || (!getSafeSamplePhotoSrc(sample.fotoUrl) && !getSafeSamplePhotoSrc(sample.fotoUrl2))) return;
+    async function openPhotoLightbox(sampleId) {
+      if (!checkAuth()) return;
+      const sample = samplesData.find(s => String(s.id) === String(sampleId));
+      if (!sample || (!hasSamplePhoto(sample.fotoUrl) && !hasSamplePhoto(sample.fotoUrl2))) return;
 
       currentActiveLightboxSample = sample;
+      activeLightboxPhotoIndex = hasSamplePhoto(sample.fotoUrl) ? 1 : 2;
       document.getElementById('lightboxTitle').innerText = `${sample.namaBarang} (${sample.namaPenyerah})`;
-
       const btn1 = document.getElementById('btnLightboxPhoto1');
       const btn2 = document.getElementById('btnLightboxPhoto2');
-
       if (btn1 && btn2) {
-        btn1.classList.toggle('hidden', !getSafeSamplePhotoSrc(sample.fotoUrl));
-        btn2.classList.toggle('hidden', !getSafeSamplePhotoSrc(sample.fotoUrl2));
+        btn1.classList.toggle('hidden', !hasSamplePhoto(sample.fotoUrl));
+        btn2.classList.toggle('hidden', !hasSamplePhoto(sample.fotoUrl2));
       }
-
-      if (getSafeSamplePhotoSrc(sample.fotoUrl)) {
-        switchLightboxPhoto(1);
-      } else {
-        switchLightboxPhoto(2);
-      }
-
       document.getElementById('modalPhotoLightbox').classList.remove('hidden');
+      await switchLightboxPhoto(activeLightboxPhotoIndex);
     }
 
-    function switchLightboxPhoto(photoIndex) {
+    async function switchLightboxPhoto(photoIndex) {
       if (!currentActiveLightboxSample) return;
-
+      if (photoIndex !== 1 && photoIndex !== 2) return;
+      const sample = currentActiveLightboxSample;
+      const sourceValue = photoIndex === 1 ? sample.fotoUrl : sample.fotoUrl2;
+      if (!hasSamplePhoto(sourceValue)) return;
+      activeLightboxPhotoIndex = photoIndex;
       const img = document.getElementById('lightboxImage');
+      img.removeAttribute('src');
+      img.alt = 'Memuat foto sample...';
       const btn1 = document.getElementById('btnLightboxPhoto1');
       const btn2 = document.getElementById('btnLightboxPhoto2');
-
-      const targetSrc = photoIndex === 1 ? currentActiveLightboxSample.fotoUrl : currentActiveLightboxSample.fotoUrl2;
-      img.src = getSafeSamplePhotoSrc(targetSrc);
-
       if (btn1 && btn2) {
         btn1.className = photoIndex === 1 ? 'px-3 py-1 rounded text-xs font-semibold bg-teal-600 text-white' : 'px-3 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white';
         btn2.className = photoIndex === 2 ? 'px-3 py-1 rounded text-xs font-semibold bg-teal-600 text-white' : 'px-3 py-1 rounded text-xs font-semibold text-slate-400 hover:text-white';
+      }
+      try {
+        const src = await resolveSamplePhotoSrc(sample, photoIndex, sourceValue);
+        if (currentActiveLightboxSample && String(currentActiveLightboxSample.id) === String(sample.id) && activeLightboxPhotoIndex === photoIndex) {
+          if (src) {
+            img.src = src;
+            img.alt = `Foto ${photoIndex} sample ${sample.kodeSample || sample.id}`;
+          } else {
+            showToast('Foto tidak dapat dimuat. Periksa koneksi atau izin Google Drive.', 'error');
+          }
+        }
+      } catch (error) {
+        if (currentActiveLightboxSample && String(currentActiveLightboxSample.id) === String(sample.id) && activeLightboxPhotoIndex === photoIndex) {
+          showToast('Gagal memuat foto sample: ' + (error.message || 'Kesalahan server'), 'error');
+        }
+      }
+    }
+
+    function isDriveSamplePhotoRef(value) {
+      return /^DRIVE:[A-Za-z0-9_-]+$/.test(String(value || '').trim());
+    }
+
+    function hasSamplePhoto(value) {
+      return Boolean(getSafeSamplePhotoSrc(value) || isDriveSamplePhotoRef(value));
+    }
+
+    async function resolveSamplePhotoSrc(sample, slot, rawValue) {
+      const direct = getSafeSamplePhotoSrc(rawValue);
+      if (direct) return direct;
+      if (!isDriveSamplePhotoRef(rawValue)) return '';
+      const cacheKey = `${String(sample.id)}:${slot}:${String(rawValue)}`;
+      if (samplePhotoCache.has(cacheKey)) return samplePhotoCache.get(cacheKey);
+      const token = getSessionTokenForCurrentRole();
+      const response = await backendPost('getSamplePhoto', token, { id: sample.id, slot: slot });
+      const dataUrl = getSafeSamplePhotoSrc(response && response.dataUrl);
+      if (!dataUrl) throw new Error((response && response.message) || 'Respons foto tidak valid.');
+      samplePhotoCache.set(cacheKey, dataUrl);
+      return dataUrl;
+    }
+
+    async function loadSamplePhotoPreview(sample, slot, expectedValue) {
+      try {
+        const src = await resolveSamplePhotoSrc(sample, slot, expectedValue);
+        const hiddenInput = document.getElementById(`sampleFotoUrl${slot}`);
+        const preview = document.getElementById(`samplePreviewImg${slot}`);
+        if (hiddenInput && preview && hiddenInput.value === expectedValue && document.getElementById('sampleFormId').value === String(sample.id)) {
+          preview.src = src;
+        }
+      } catch (error) {
+        showToast('Foto sample lama belum bisa dimuat: ' + (error.message || 'Kesalahan server'), 'warning');
+      }
+    }
+
+    async function startSamplePhotoDriveMigration() {
+      if (!checkAuth() || currentRole !== 'admin' || !isAdminLoggedIn) {
+        showToast('Migrasi foto hanya dapat dijalankan oleh Admin.', 'error');
+        return;
+      }
+      const confirmation = await Swal.fire({
+        title: 'Migrasi Foto ke Google Drive?',
+        html: 'Foto lama Base64 pada sheet <b>DataSample</b> akan disalin ke folder privat <b>SIPENBER - Foto Penyerahan Sample</b>. Sel spreadsheet hanya diganti setelah file berhasil dibuat. Foto gagal migrasi tetap disimpan di sheet.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Mulai Migrasi',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#0284c7'
+      });
+      if (!confirmation.isConfirmed) return;
+
+      const token = getSessionTokenForCurrentRole();
+      let startRow = 2, totalMigrated = 0, totalAlreadyInDrive = 0, totalErrors = 0, calls = 0;
+      let errors = [];
+      Swal.fire({ title: 'Migrasi foto berlangsung', html: 'Menyiapkan pemindahan foto...', allowOutsideClick: false, allowEscapeKey: false, didOpen: () => Swal.showLoading() });
+      try {
+        while (true) {
+          const result = await backendPost('migrateSamplePhotosToDrive', token, { startRow: startRow, batchRows: 25 });
+          if (!result || result.status !== 'success' || result.success !== true) throw new Error((result && result.message) || 'Server gagal memproses migrasi.');
+          totalMigrated += Number(result.migratedPhotos || 0);
+          totalAlreadyInDrive += Number(result.alreadyInDrive || 0);
+          totalErrors += Number(result.errorCount || 0);
+          errors = errors.concat(Array.isArray(result.errors) ? result.errors : []).slice(0, 8);
+          calls++;
+          startRow = Number(result.nextRow || (startRow + Number(result.scannedRows || 25)));
+          Swal.update({ html: `Batch ${calls}<br>Foto berhasil dipindahkan: <b>${totalMigrated}</b><br>Foto sudah di Drive: <b>${totalAlreadyInDrive}</b><br>Perlu diperiksa: <b>${totalErrors}</b>` });
+          if (result.done === true) break;
+          if (calls > 500) throw new Error('Migrasi dihentikan karena jumlah batch melebihi batas aman. Jalankan kembali untuk melanjutkan dari data yang tersisa.');
+        }
+        await fetchSamplesFromBackend(token);
+        await fetchLogsFromBackend(token).catch(() => false);
+        samplePhotoCache.clear();
+        const errorHtml = errors.length ? `<hr><div style="text-align:left;font-size:12px;max-height:140px;overflow:auto">${errors.map(err => `Baris ${escapeHtml(err.row)}, foto ${escapeHtml(err.slot)}: ${escapeHtml(err.message)}`).join('<br>')}</div>` : '';
+        await Swal.fire({
+          title: totalErrors ? 'Migrasi selesai dengan catatan' : 'Migrasi Foto Selesai',
+          html: `Foto baru dipindahkan: <b>${totalMigrated}</b><br>Foto sudah tersimpan di Drive: <b>${totalAlreadyInDrive}</b><br>Foto yang perlu diperiksa: <b>${totalErrors}</b>${errorHtml}`,
+          icon: totalErrors ? 'warning' : 'success',
+          confirmButtonColor: '#0d9488'
+        });
+      } catch (error) {
+        Swal.close();
+        showToast('Migrasi belum selesai: ' + (error.message || 'Kesalahan server'), 'error');
       }
     }
 
@@ -1480,7 +1581,7 @@
       let rowsHtml = '';
 
       filtered.forEach((item, index) => {
-        const photoCount = (getSafeSamplePhotoSrc(item.fotoUrl) ? 1 : 0) + (getSafeSamplePhotoSrc(item.fotoUrl2) ? 1 : 0);
+        const photoCount = (hasSamplePhoto(item.fotoUrl) ? 1 : 0) + (hasSamplePhoto(item.fotoUrl2) ? 1 : 0);
         const kodeSample = item.kodeSample || item.id || '-';
         const tanggal = item.tanggalPenyerahan || '-';
         const namaBarang = item.namaBarang || '-';
@@ -1546,6 +1647,7 @@
               <input id="sampleSelectAllFiltered" type="checkbox" class="sample-print-checkbox" aria-label="Pilih semua hasil filter" onchange="toggleAllFilteredSamplePrintSelection(this.checked)">
               <span>Pilih semua hasil filter</span>
             </label>
+            ${isAdmin ? `<button type="button" onclick="startSamplePhotoDriveMigration()" title="Pindahkan foto Base64 lama ke folder privat Google Drive" aria-label="Migrasi foto sample ke Google Drive" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 text-xs font-semibold transition"><i class="fa-brands fa-google-drive" aria-hidden="true"></i><span>Migrasi Foto ke Drive</span></button>` : ''}
             <span id="sampleSelectionCountBadge" class="bg-slate-700 text-slate-300 text-xs px-2.5 py-0.5 rounded-full font-semibold">0 dipilih</span>
             <span class="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-teal-500/30">${filtered.length} Sample</span>
           </div>
@@ -1666,7 +1768,7 @@
       const lines = [headers, ...rows.map(item => [item.kodeSample || item.id, item.tanggalPenyerahan, item.namaPenyerah,
         item.namaBarang, item.jumlah || 1, item.satuan || 'Pcs', item.namaPenerima, item.tujuan,
         item.statusPenyerahan || 'Sudah Diserahkan', item.keterangan,
-        getSafeSamplePhotoSrc(item.fotoUrl) ? 'Ada' : 'Tidak', getSafeSamplePhotoSrc(item.fotoUrl2) ? 'Ada' : 'Tidak'])];
+        hasSamplePhoto(item.fotoUrl) ? 'Ada' : 'Tidak', hasSamplePhoto(item.fotoUrl2) ? 'Ada' : 'Tidak'])];
       const csv = '\uFEFF' + lines.map(row => row.map(csvSafeValue).join(',')).join('\r\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -2451,8 +2553,8 @@
     }
 
 
-    // Sample photos are created as Base64 data URLs by the upload/compression flow.
-    // Reject arbitrary URL schemes and SVG content from stored or edited spreadsheet values.
+    // Raw images in the browser use safe Base64 data URLs; DRIVE:<id> is a private server-side reference only.
+    // Never assign Drive references or arbitrary URL schemes directly to img.src.
     function getSafeSamplePhotoSrc(value) {
       const src = String(value || '').trim();
       return /^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(src) ? src : '';
