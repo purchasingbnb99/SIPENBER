@@ -298,17 +298,29 @@
         <div class="flex flex-1 flex-col sm:flex-row gap-2">
           <div class="relative flex-1">
             <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-            <input type="text" id="searchSampleInput" oninput="renderSampleTable()" placeholder="Cari Penyerah, Nama Barang, Keterangan..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500">
+            <input type="text" id="searchSampleInput" oninput="renderSampleTable()" placeholder="Cari Kode, Penyerah, Sample, Penerima, Tujuan..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500">
           </div>
           
           <select id="filterSampleDate" onchange="renderSampleTable()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-teal-500 min-w-[160px]">
             <option value="">Semua Tanggal Penyerahan</option>
           </select>
+          <select id="filterSampleStatus" onchange="renderSampleTable()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-teal-500 min-w-[150px]">
+            <option value="">Semua Status</option>
+            <option value="Disiapkan">Disiapkan</option>
+            <option value="Sudah Diserahkan">Sudah Diserahkan</option>
+            <option value="Dibatalkan">Dibatalkan</option>
+          </select>
         </div>
 
-        <div class="flex items-center gap-2">
-          <button onclick="fetchSamplesFromBackend()" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm flex items-center justify-center gap-2 transition">
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btnRefreshSamples" onclick="refreshSamplesFromBackend()" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm flex items-center justify-center gap-2 transition">
             <i class="fa-solid fa-rotate"></i> Refresh Sample
+          </button>
+          <button onclick="printSampleReport()" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm flex items-center justify-center gap-2 transition">
+            <i class="fa-solid fa-print"></i> Cetak Laporan
+          </button>
+          <button onclick="exportSamplesCsv()" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm flex items-center justify-center gap-2 transition">
+            <i class="fa-solid fa-file-csv"></i> Export Excel/CSV
           </button>
 
           <!-- TOMBOL INPUT SAMPLE (ADMIN ONLY) -->
@@ -433,6 +445,11 @@
 
       <div class="space-y-3 overflow-y-auto pr-1 flex-1">
         <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Kode Sample (otomatis)</label>
+          <input type="text" id="sampleKode" readonly placeholder="Dibuat otomatis saat disimpan" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-teal-300 font-mono">
+          <p class="text-[10px] text-slate-500 mt-1">Kode baru dibuat oleh server dan tidak dapat diubah manual.</p>
+        </div>
+        <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Tanggal Penyerahan (DD/MM/YYYY)</label>
           <input type="text" id="sampleTanggal" placeholder="DD/MM/YYYY" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-teal-500">
         </div>
@@ -447,9 +464,35 @@
           <input type="text" id="sampleNamaBarang" placeholder="Contoh: Sample Kain Cotton Combed 30s Black" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-teal-500">
         </div>
 
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Jumlah Sample</label>
+            <input type="number" id="sampleJumlah" min="0.01" step="any" value="1" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-teal-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Satuan</label>
+            <select id="sampleSatuan" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-teal-500">
+              <option value="Pcs">Pcs</option><option value="Set">Set</option><option value="Lembar">Lembar</option><option value="Meter">Meter</option><option value="Kg">Kg</option><option value="Roll">Roll</option><option value="Box">Box</option><option value="Paket">Paket</option><option value="Lainnya">Lainnya</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Penerima / Perusahaan (opsional)</label>
+          <input type="text" id="samplePenerima" maxlength="200" placeholder="Nama customer, perusahaan, atau divisi penerima" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-teal-500">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Tujuan Penyerahan (opsional)</label>
+          <input type="text" id="sampleTujuan" maxlength="500" placeholder="Contoh: Approval warna, uji kualitas, evaluasi customer" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-teal-500">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Status Penyerahan</label>
+          <select id="sampleStatus" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-teal-500">
+            <option value="Sudah Diserahkan">Sudah Diserahkan</option><option value="Disiapkan">Disiapkan</option><option value="Dibatalkan">Dibatalkan</option>
+          </select>
+        </div>
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Keterangan / Spesifikasi</label>
-          <textarea id="sampleKeterangan" rows="2" placeholder="Catatan fisik, kuantitas swatch, atau kondisi barang..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-teal-500"></textarea>
+          <textarea id="sampleKeterangan" rows="2" maxlength="5000" placeholder="Spesifikasi, warna, kondisi barang, atau catatan tambahan..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-teal-500"></textarea>
         </div>
 
         <!-- UPLOAD FOTO 1 (UTAMA) -->
@@ -1013,9 +1056,15 @@
         tanggalPenyerahan: formatDateString(item.tanggalPenyerahan || item.tanggal),
         namaPenyerah: item.namaPenyerah || '-',
         namaBarang: item.namaBarang || '-',
-        keterangan: item.keterangan || '-',
+        keterangan: item.keterangan || '',
         fotoUrl: item.fotoUrl || '',
-        fotoUrl2: item.fotoUrl2 || ''
+        fotoUrl2: item.fotoUrl2 || '',
+        kodeSample: item.kodeSample || item.id || '',
+        jumlah: Number(item.jumlah) > 0 ? Number(item.jumlah) : 1,
+        satuan: item.satuan || 'Pcs',
+        namaPenerima: item.namaPenerima || '',
+        tujuan: item.tujuan || '',
+        statusPenyerahan: item.statusPenyerahan || 'Sudah Diserahkan'
       }));
     }
 
@@ -1031,6 +1080,12 @@
       }
 
       document.getElementById('sampleFormId').value = '';
+      document.getElementById('sampleKode').value = '';
+      document.getElementById('sampleJumlah').value = '1';
+      document.getElementById('sampleSatuan').value = 'Pcs';
+      document.getElementById('samplePenerima').value = '';
+      document.getElementById('sampleTujuan').value = '';
+      document.getElementById('sampleStatus').value = 'Sudah Diserahkan';
       document.getElementById('modalSampleTitle').innerText = 'Catat Penyerahan Sample Baru';
       
       const now = new Date();
@@ -1060,12 +1115,18 @@
       if (!sample) return;
 
       document.getElementById('sampleFormId').value = sample.id;
+      document.getElementById('sampleKode').value = sample.kodeSample || sample.id || '';
       document.getElementById('modalSampleTitle').innerText = 'Edit Data Penyerahan Sample';
 
       document.getElementById('sampleTanggal').value = sample.tanggalPenyerahan || '';
       document.getElementById('samplePenyerah').value = sample.namaPenyerah || '';
       document.getElementById('sampleNamaBarang').value = sample.namaBarang || '';
       document.getElementById('sampleKeterangan').value = sample.keterangan || '';
+      document.getElementById('sampleJumlah').value = String(Number(sample.jumlah) > 0 ? Number(sample.jumlah) : 1);
+      document.getElementById('sampleSatuan').value = sample.satuan || 'Pcs';
+      document.getElementById('samplePenerima').value = sample.namaPenerima || '';
+      document.getElementById('sampleTujuan').value = sample.tujuan || '';
+      document.getElementById('sampleStatus').value = sample.statusPenyerahan || 'Sudah Diserahkan';
 
       if (sample.fotoUrl) {
         document.getElementById('sampleFotoUrl1').value = sample.fotoUrl;
@@ -1113,32 +1174,31 @@
 
             canvas.width = width;
             canvas.height = height;
-            // Foto tersimpan sebagai satu nilai sel Google Sheets (batas praktis < 50.000 karakter).
-            // Kompresi adaptif mempertahankan ukuran setinggi mungkin tanpa melewati batas backend.
+            // Foto masih disimpan pada sel Google Sheets; batasi ukuran agar di bawah batas sel.
+            // Loop adaptif menangani foto panorama/portrait maupun foto berukuran kecil.
             let quality = 0.82;
             let compressedBase64 = '';
             const maxBase64Chars = 44000;
-
-            while (width >= 480 && height >= 360) {
-              canvas.width = width;
-              canvas.height = height;
+            for (let attempt = 0; attempt < 24; attempt++) {
+              canvas.width = Math.max(1, Math.round(width));
+              canvas.height = Math.max(1, Math.round(height));
               const ctx = canvas.getContext('2d');
-              ctx.clearRect(0, 0, width, height);
-              ctx.drawImage(img, 0, 0, width, height);
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
               compressedBase64 = canvas.toDataURL('image/jpeg', quality);
-
               if (compressedBase64.length <= maxBase64Chars) break;
 
               if (quality > 0.50) {
                 quality = Math.max(0.50, quality - 0.08);
               } else {
-                width = Math.round(width * 0.85);
-                height = Math.round(height * 0.85);
+                width = Math.max(1, Math.round(width * 0.85));
+                height = Math.max(1, Math.round(height * 0.85));
+                quality = 0.72;
               }
             }
 
             if (!compressedBase64 || compressedBase64.length > maxBase64Chars) {
-              showToast('Foto terlalu besar untuk disimpan dengan aman. Pilih foto lebih kecil atau potong gambar terlebih dahulu.', 'warning');
+              showToast('Ukuran foto belum bisa diperkecil hingga batas aman. Coba foto lain dengan resolusi lebih rendah.', 'warning');
               return;
             }
 
@@ -1166,48 +1226,80 @@
         return;
       }
 
-      const id = document.getElementById('sampleFormId').value;
+      const saveButton = document.querySelector('#modalSampleForm button[onclick="saveSampleRecord()"]');
+      if (saveButton && saveButton.disabled) return;
+
+      const id = document.getElementById('sampleFormId').value.trim();
       const tanggal = formatDateString(document.getElementById('sampleTanggal').value.trim());
       const penyerah = document.getElementById('samplePenyerah').value.trim();
       const namaBarang = document.getElementById('sampleNamaBarang').value.trim();
       const keterangan = document.getElementById('sampleKeterangan').value.trim();
       const fotoUrl1 = document.getElementById('sampleFotoUrl1').value;
       const fotoUrl2 = document.getElementById('sampleFotoUrl2').value;
+      const jumlah = Number(document.getElementById('sampleJumlah').value);
+      const satuan = document.getElementById('sampleSatuan').value;
+      const namaPenerima = document.getElementById('samplePenerima').value.trim();
+      const tujuan = document.getElementById('sampleTujuan').value.trim();
+      const statusPenyerahan = document.getElementById('sampleStatus').value;
 
       if (!tanggal || !penyerah || !namaBarang) {
         showToast('Lengkapi Tanggal, Nama Penyerah, dan Nama Barang!', 'warning');
         return;
       }
+      if (!Number.isFinite(jumlah) || jumlah <= 0) {
+        showToast('Jumlah sample harus lebih besar dari nol.', 'warning');
+        document.getElementById('sampleJumlah').focus();
+        return;
+      }
+      if (penyerah.length > 200 || namaBarang.length > 300 || namaPenerima.length > 200 || tujuan.length > 500 || keterangan.length > 5000) {
+        showToast('Ada isian yang melebihi batas karakter.', 'warning');
+        return;
+      }
+      if (!['Disiapkan', 'Sudah Diserahkan', 'Dibatalkan'].includes(statusPenyerahan)) {
+        showToast('Status penyerahan tidak valid.', 'warning');
+        return;
+      }
 
       const isEdit = Boolean(id);
+      const existing = isEdit ? samplesData.find(s => s.id === id) : null;
       const sampleItem = {
-        id: id || ('SMP-' + Date.now()),
+        id: id || ('SMP-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
+        isEdit: isEdit,
+        kodeSample: document.getElementById('sampleKode').value.trim() || (existing && existing.kodeSample) || '',
         tanggalPenyerahan: tanggal,
         namaPenyerah: penyerah,
         namaBarang: namaBarang,
         keterangan: keterangan,
         fotoUrl: fotoUrl1,
-        fotoUrl2: fotoUrl2
+        fotoUrl2: fotoUrl2,
+        jumlah: jumlah,
+        satuan: satuan,
+        namaPenerima: namaPenerima,
+        tujuan: tujuan,
+        statusPenyerahan: statusPenyerahan
       };
 
-      if (isEdit) {
-        const idx = samplesData.findIndex(s => s.id === id);
-        if (idx !== -1) samplesData[idx] = sampleItem;
-      } else {
-        samplesData.unshift(sampleItem);
+      if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.dataset.originalText = saveButton.innerText;
+        saveButton.innerText = 'Menyimpan...';
+        saveButton.classList.add('opacity-60', 'cursor-not-allowed');
       }
 
-      saveLocalSamples();
-      renderSampleTable();
-      closeSampleModal();
-
-      const countPhotos = (fotoUrl1 ? 1 : 0) + (fotoUrl2 ? 1 : 0);
-      addLogEntry(
-        isEdit ? 'Edit Sample' : 'Tambah Sample', 
-        `🧪 ${isEdit ? 'Mengubah' : 'Mencatat'} penyerahan sample "${namaBarang}" oleh ${penyerah} (${countPhotos} Foto terlampir)`
-      );
-
-      await runBackendMutation('saveSample', { sample: sampleItem }, isEdit ? 'Data sample diperbarui' : 'Sample berhasil dicatat');
+      try {
+        const countPhotos = (fotoUrl1 ? 1 : 0) + (fotoUrl2 ? 1 : 0);
+        const saved = await runBackendMutation('saveSample', { sample: sampleItem }, isEdit ? 'Data sample berhasil diperbarui' : 'Sample berhasil disimpan ke server');
+        if (saved) {
+          closeSampleModal();
+          // Data dan kode sample berasal dari backend; jangan menambahkan item secara optimistis.
+        }
+      } finally {
+        if (saveButton) {
+          saveButton.disabled = false;
+          saveButton.innerText = saveButton.dataset.originalText || 'Simpan Data Sample';
+          saveButton.classList.remove('opacity-60', 'cursor-not-allowed');
+        }
+      }
     }
 
     function deleteSampleRecord(id) {
@@ -1218,7 +1310,10 @@
       }
 
       const sample = samplesData.find(s => s.id === id);
-      if (!sample) return;
+      if (!sample) {
+        showToast('Data sample tidak ditemukan di tampilan. Refresh data lalu coba kembali.', 'warning');
+        return;
+      }
 
       Swal.fire({
         title: 'Hapus Data Sample?',
@@ -1228,16 +1323,38 @@
         confirmButtonColor: '#ef4444',
         confirmButtonText: 'Ya, Hapus!'
       }).then(async (result) => {
-        if (result.isConfirmed) {
-          samplesData = samplesData.filter(s => s.id !== id);
-          saveLocalSamples();
-          renderSampleTable();
-
-          addLogEntry('Hapus Sample', `🗑️ Menghapus data sample "${sample.namaBarang}" (${sample.namaPenyerah})`);
-
-          await runBackendMutation('deleteSample', { id: id }, 'Data sample berhasil dihapus');
-        }
+        if (!result.isConfirmed) return;
+        await runBackendMutation('deleteSample', { id: id }, 'Data sample berhasil dihapus dari server');
       });
+    }
+
+    async function refreshSamplesFromBackend() {
+      if (!checkAuth()) return;
+      const token = getSessionTokenForCurrentRole();
+      if (!token || !isRoleSessionActive(currentRole)) {
+        showToast('Sesi tidak tersedia. Silakan login kembali.', 'warning');
+        openPasswordModal(currentRole);
+        return;
+      }
+      const button = document.getElementById('btnRefreshSamples');
+      if (button) {
+        button.disabled = true;
+        button.dataset.originalHtml = button.innerHTML;
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memuat...';
+      }
+      try {
+        await fetchSamplesFromBackend(token);
+        updateGasStatusBadge(true);
+        showToast(`Data sample berhasil dimuat (${samplesData.length} record).`, 'success');
+      } catch (error) {
+        updateGasStatusBadge(false);
+        showToast('Gagal memuat data sample: ' + (error.message || 'Kesalahan server'), 'error');
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.innerHTML = button.dataset.originalHtml || '<i class="fa-solid fa-rotate"></i> Refresh Sample';
+        }
+      }
     }
 
     function openPhotoLightbox(sampleId) {
@@ -1290,6 +1407,7 @@
       const emptyState = document.getElementById('emptySampleState');
       const searchVal = document.getElementById('searchSampleInput').value.toLowerCase();
       const filterDate = document.getElementById('filterSampleDate').value;
+      const filterStatus = document.getElementById('filterSampleStatus').value;
 
       updateFilterSampleDateOptions();
 
@@ -1300,11 +1418,16 @@
         const penyerah = (sample.namaPenyerah || '').toLowerCase();
         const barang = (sample.namaBarang || '').toLowerCase();
         const ket = (sample.keterangan || '').toLowerCase();
+        const penerima = (sample.namaPenerima || '').toLowerCase();
+        const tujuan = (sample.tujuan || '').toLowerCase();
+        const kode = (sample.kodeSample || sample.id || '').toLowerCase();
+        const status = sample.statusPenyerahan || 'Sudah Diserahkan';
 
-        const matchSearch = !searchVal || penyerah.includes(searchVal) || barang.includes(searchVal) || ket.includes(searchVal);
+        const matchSearch = !searchVal || penyerah.includes(searchVal) || barang.includes(searchVal) || ket.includes(searchVal) || penerima.includes(searchVal) || tujuan.includes(searchVal) || kode.includes(searchVal);
         const matchDate = !filterDate || sample.tanggalPenyerahan === filterDate;
+        const matchStatus = !filterStatus || status === filterStatus;
 
-        return matchSearch && matchDate;
+        return matchSearch && matchDate && matchStatus;
       });
 
       if (filtered.length === 0) {
@@ -1327,10 +1450,15 @@
         rowsHtml += `
           <tr class="hover:bg-slate-700/30 transition border-b border-slate-700/50">
             <td class="py-3 px-4 text-center text-xs font-semibold text-slate-500">${index + 1}</td>
-            <td class="py-3 px-4 font-bold text-teal-400 font-mono whitespace-nowrap">${escapeHtml(item.tanggalPenyerahan)}</td>
+            <td class="py-3 px-4 font-bold text-teal-400 font-mono whitespace-nowrap">${escapeHtml(item.kodeSample || item.id)}</td>
+            <td class="py-3 px-4 font-bold text-slate-300 font-mono whitespace-nowrap">${escapeHtml(item.tanggalPenyerahan)}</td>
             <td class="py-3 px-4 font-semibold text-slate-100">${escapeHtml(item.namaPenyerah)}</td>
-            <td class="py-3 px-4 font-medium text-teal-300">${escapeHtml(item.namaBarang)}</td>
-            <td class="py-3 px-4 text-xs text-slate-300">${escapeHtml(item.keterangan || '-')}</td>
+            <td class="py-3 px-4 font-medium text-teal-300 min-w-[180px]">${escapeHtml(item.namaBarang)}</td>
+            <td class="py-3 px-4 text-center whitespace-nowrap">${escapeHtml(String(item.jumlah || 1))} ${escapeHtml(item.satuan || 'Pcs')}</td>
+            <td class="py-3 px-4 text-xs text-slate-200">${escapeHtml(item.namaPenerima || '-')}</td>
+            <td class="py-3 px-4 text-xs text-slate-300">${escapeHtml(item.tujuan || '-')}</td>
+            <td class="py-3 px-4 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-[10px] font-semibold ${((item.statusPenyerahan || 'Sudah Diserahkan') === 'Sudah Diserahkan') ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : ((item.statusPenyerahan || 'Sudah Diserahkan') === 'Disiapkan' ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-red-500/15 text-red-300 border border-red-500/30')}">${escapeHtml(item.statusPenyerahan || 'Sudah Diserahkan')}</span></td>
+            <td class="py-3 px-4 text-xs text-slate-300 min-w-[180px]">${escapeHtml(item.keterangan || '-')}</td>
             <td class="py-3 px-4 text-center whitespace-nowrap">
               ${photoCount > 0 ? `
                 <button onclick="openPhotoLightbox(${safeJsArg(item.id)})" class="px-2.5 py-1 bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-600 hover:text-white rounded-lg text-xs font-medium flex items-center gap-1.5 mx-auto transition">
@@ -1372,9 +1500,14 @@
             <thead class="bg-slate-900/50 uppercase text-[11px] font-semibold text-slate-400 border-b border-slate-700/80">
               <tr>
                 <th class="py-3 px-4 w-12 text-center">NO</th>
+                <th class="py-3 px-4">KODE SAMPLE</th>
                 <th class="py-3 px-4">TGL PENYERAHAN</th>
                 <th class="py-3 px-4">NAMA PENYERAH</th>
                 <th class="py-3 px-4">NAMA BARANG / SAMPLE</th>
+                <th class="py-3 px-4 text-center">JUMLAH</th>
+                <th class="py-3 px-4">PENERIMA / PERUSAHAAN</th>
+                <th class="py-3 px-4">TUJUAN</th>
+                <th class="py-3 px-4">STATUS</th>
                 <th class="py-3 px-4">KETERANGAN</th>
                 <th class="py-3 px-4 text-center">FOTO SAMPLE</th>
                 <th class="py-3 px-4 text-center">AKSI / STATUS</th>
@@ -1388,6 +1521,91 @@
       `;
 
       updateSampleStats();
+    }
+
+    function getFilteredSamplesForActions() {
+      const searchVal = (document.getElementById('searchSampleInput').value || '').trim().toLowerCase();
+      const filterDate = document.getElementById('filterSampleDate').value;
+      const filterStatus = document.getElementById('filterSampleStatus').value;
+      return samplesData.filter(sample => {
+        if (!sample || !sample.namaPenyerah || sample.namaPenyerah === 'undefined') return false;
+        const searchable = [sample.kodeSample, sample.id, sample.namaPenyerah, sample.namaBarang,
+          sample.keterangan, sample.namaPenerima, sample.tujuan, sample.statusPenyerahan]
+          .map(value => String(value || '').toLowerCase()).join(' ');
+        return (!searchVal || searchable.includes(searchVal)) &&
+          (!filterDate || sample.tanggalPenyerahan === filterDate) &&
+          (!filterStatus || (sample.statusPenyerahan || 'Sudah Diserahkan') === filterStatus);
+      });
+    }
+
+    function csvSafeValue(value) {
+      let text = String(value == null ? '' : value);
+      // Prevent spreadsheet formula execution when CSV is opened in Excel/Sheets.
+      if (/^[\s\u0000-\u001f]*[=+@-]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
+
+    function exportSamplesCsv() {
+      if (!checkAuth()) return;
+      const rows = getFilteredSamplesForActions();
+      if (!rows.length) {
+        showToast('Tidak ada data sample sesuai filter untuk diekspor.', 'warning');
+        return;
+      }
+      const headers = ['Kode Sample','Tanggal Penyerahan','Nama Penyerah','Nama Barang / Sample','Jumlah','Satuan','Penerima / Perusahaan','Tujuan Penyerahan','Status Penyerahan','Keterangan','Foto 1','Foto 2'];
+      const lines = [headers, ...rows.map(item => [item.kodeSample || item.id, item.tanggalPenyerahan, item.namaPenyerah,
+        item.namaBarang, item.jumlah || 1, item.satuan || 'Pcs', item.namaPenerima, item.tujuan,
+        item.statusPenyerahan || 'Sudah Diserahkan', item.keterangan,
+        getSafeSamplePhotoSrc(item.fotoUrl) ? 'Ada' : 'Tidak', getSafeSamplePhotoSrc(item.fotoUrl2) ? 'Ada' : 'Tidak'])];
+      const csv = '\uFEFF' + lines.map(row => row.map(csvSafeValue).join(',')).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateTag = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `Laporan-Penyerahan-Sample-${dateTag}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast(`Export ${rows.length} data sample selesai. File CSV dapat dibuka di Excel.`, 'success');
+    }
+
+    function printSampleReport() {
+      if (!checkAuth()) return;
+      const rows = getFilteredSamplesForActions();
+      if (!rows.length) {
+        showToast('Tidak ada data sample sesuai filter untuk dicetak.', 'warning');
+        return;
+      }
+      const printArea = document.getElementById('printArea');
+      const today = new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+      const bodyRows = rows.map((item, index) => `
+        <tr>
+          <td style="text-align:center">${index + 1}</td>
+          <td>${escapeHtml(item.kodeSample || item.id)}</td>
+          <td>${escapeHtml(item.tanggalPenyerahan)}</td>
+          <td>${escapeHtml(item.namaPenyerah)}</td>
+          <td>${escapeHtml(item.namaBarang)}</td>
+          <td style="text-align:center">${escapeHtml(String(item.jumlah || 1))} ${escapeHtml(item.satuan || 'Pcs')}</td>
+          <td>${escapeHtml(item.namaPenerima || '-')}</td>
+          <td>${escapeHtml(item.tujuan || '-')}</td>
+          <td>${escapeHtml(item.statusPenyerahan || 'Sudah Diserahkan')}</td>
+          <td>${escapeHtml(item.keterangan || '-')}</td>
+        </tr>`).join('');
+      printArea.innerHTML = `
+        <div style="font-family:Arial,sans-serif;color:#111;background:#fff;padding:8px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:12px">
+            <div><h2 style="margin:0;font-size:18px">LAPORAN PENYERAHAN SAMPLE</h2><p style="margin:5px 0 0;font-size:11px">SIPENBER — Sistem Penerimaan Berkas &amp; Sample</p></div>
+            <div style="text-align:right;font-size:10px">Dicetak: ${escapeHtml(today)}<br>Total: ${rows.length} record</div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:9px">
+            <thead><tr style="background:#eee"><th>No</th><th>Kode Sample</th><th>Tanggal</th><th>Penyerah</th><th>Nama Sample</th><th>Jumlah</th><th>Penerima</th><th>Tujuan</th><th>Status</th><th>Keterangan</th></tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>`;
+      window.print();
+      showToast(`Laporan ${rows.length} sample siap dicetak.`, 'success');
     }
 
     function updateSampleStats() {
