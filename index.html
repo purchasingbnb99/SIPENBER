@@ -893,10 +893,27 @@
 
     async function runBackendMutation(action, payload = {}, successMessage = '') {
       try {
-        const result = await backendPost(action, getSessionTokenForCurrentRole(), payload);
+        const token = getSessionTokenForCurrentRole();
+        const result = await backendPost(action, token, payload);
         if (!result || Array.isArray(result) || result.status !== 'success' || result.success === false) {
           throw new Error((result && result.message) || 'Server tidak mengonfirmasi penyimpanan.');
         }
+
+        // Server adalah sumber data utama: segarkan modul yang berubah dan Logbook setelah konfirmasi sukses.
+        let refreshFailed = false;
+        try {
+          if (['createBerkasBatch', 'updatePenerimaStatus', 'updatePenerimaStatusBatch', 'updateDocumentDetails', 'unlockDocument', 'deleteDocument', 'deleteGroupDate'].includes(action)) {
+            await fetchDocumentsFromBackend(token);
+          } else if (['saveSample', 'deleteSample'].includes(action)) {
+            await fetchSamplesFromBackend(token);
+          }
+          await fetchLogsFromBackend(token);
+        } catch (refreshError) {
+          refreshFailed = true;
+        }
+
+        if (result.auditWarning) showToast(result.auditWarning, 'warning');
+        if (refreshFailed) showToast('Perubahan sudah dikonfirmasi server, tetapi penyegaran tampilan gagal. Tekan Refresh untuk memuat ulang.', 'warning');
         if (successMessage) showToast(successMessage, 'success');
         return true;
       } catch (error) {
@@ -1096,10 +1113,34 @@
 
             canvas.width = width;
             canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
+            // Foto tersimpan sebagai satu nilai sel Google Sheets (batas praktis < 50.000 karakter).
+            // Kompresi adaptif mempertahankan ukuran setinggi mungkin tanpa melewati batas backend.
+            let quality = 0.82;
+            let compressedBase64 = '';
+            const maxBase64Chars = 44000;
 
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+            while (width >= 480 && height >= 360) {
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.clearRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
+              compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+
+              if (compressedBase64.length <= maxBase64Chars) break;
+
+              if (quality > 0.50) {
+                quality = Math.max(0.50, quality - 0.08);
+              } else {
+                width = Math.round(width * 0.85);
+                height = Math.round(height * 0.85);
+              }
+            }
+
+            if (!compressedBase64 || compressedBase64.length > maxBase64Chars) {
+              showToast('Foto terlalu besar untuk disimpan dengan aman. Pilih foto lebih kecil atau potong gambar terlebih dahulu.', 'warning');
+              return;
+            }
 
             document.getElementById(`sampleFotoUrl${index}`).value = compressedBase64;
             document.getElementById(`samplePreviewImg${index}`).src = compressedBase64;
@@ -1781,7 +1822,7 @@
 
           addLogEntry('Hapus Group Tanggal', `🗑️ Menghapus seluruh data (${docsForDate.length} berkas) pada tanggal ${date}`);
 
-          await runBackendMutation('deleteGroupDate', { ids: idsToDelete, pos: posToDelete }, `Semua data tanggal ${date} berhasil dihapus`);
+          await runBackendMutation('deleteGroupDate', { ids: idsToDelete }, `Semua data tanggal ${date} berhasil dihapus`);
         }
       });
     }
@@ -1960,28 +2001,30 @@
     }
 
     function addLogEntry(actionName, details) {
-      const newLog = {
-        id: 'LOG-' + Date.now(),
-        timestamp: getFormattedTimestamp(),
-        role: currentRole,
-        action: actionName,
-        details: details
-      };
-      logsData.unshift(newLog);
-      saveLocalLogs();
-      updateLogCountBadge();
+      // Semua mutasi data dicatat oleh backend hanya setelah operasi berhasil.
+      // Frontend hanya boleh melaporkan event cetak; role, ID, dan timestamp dibuat server.
+      if (actionName !== 'Cetak Tanda Terima') return;
 
-      if (GAS_API_URL && GAS_API_URL.trim() !== "" && !GAS_API_URL.includes("ISI_DENGAN_URL")) {
-        backendPost('addLogbookEntry', getSessionTokenForCurrentRole(), { logData: newLog })
-          .then(result => {
-            if (!result || result.status !== 'success') throw new Error((result && result.message) || 'Logbook gagal disimpan.');
-          })
-          .catch(() => {
-            // Tidak menampilkan toast sukses untuk pencatatan log yang belum dikonfirmasi server.
-            const token = getSessionTokenForCurrentRole();
-            if (token) fetchLogsFromBackend(token).catch(() => false);
-          });
-      }
+      const token = getSessionTokenForCurrentRole();
+      if (!token || !isRoleSessionActive(currentRole)) return;
+      const safeDetails = String(details || '').slice(0, 1000);
+
+      backendPost('addLogbookEntry', token, {
+        logData: { action: 'Cetak Tanda Terima', details: safeDetails }
+      }).then(async result => {
+        if (!result || result.status !== 'success' || result.success !== true) {
+          throw new Error((result && result.message) || 'Log cetak gagal disimpan.');
+        }
+        await fetchLogsFromBackend(token);
+      }).catch(error => {
+        showToast('Aktivitas cetak belum tercatat di Logbook server: ' + (error.message || 'Kesalahan server'), 'warning');
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>\"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;'
+      }[char]));
     }
 
     function renderLogbookTable() {
@@ -2001,16 +2044,16 @@
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-700/20';
 
-        const formattedDetails = log.details.replace(/\n/g, '<br>');
+        const formattedDetails = escapeHtml(log.details || '').replace(/\n/g, '<br>');
 
         tr.innerHTML = `
-          <td class="py-2.5 px-3 text-slate-400 whitespace-nowrap font-mono text-[11px]">${log.timestamp}</td>
+          <td class="py-2.5 px-3 text-slate-400 whitespace-nowrap font-mono text-[11px]">${escapeHtml(log.timestamp || '')}</td>
           <td class="py-2.5 px-3">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${log.role === 'admin' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}">
-              ${log.role.toUpperCase()}
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${String(log.role || '').toLowerCase() === 'admin' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}">
+              ${escapeHtml(String(log.role || 'penerima').toUpperCase())}
             </span>
           </td>
-          <td class="py-2.5 px-3 font-semibold text-slate-200 whitespace-nowrap">${log.action}</td>
+          <td class="py-2.5 px-3 font-semibold text-slate-200 whitespace-nowrap">${escapeHtml(log.action || '')}</td>
           <td class="py-2.5 px-3 text-slate-300 font-mono text-[11px] leading-relaxed">${formattedDetails}</td>
         `;
         tbody.appendChild(tr);
@@ -2031,11 +2074,16 @@
           return matchRole && matchSearch;
         });
         targetIds = filtered.map(l => l.id);
+        if (targetIds.length === 0) {
+          showToast('Tidak ada catatan yang cocok dengan filter. Logbook tidak dihapus.', 'warning');
+          return;
+        }
       }
+      const clearAll = !roleFilter && !searchFilter;
 
       Swal.fire({
         title: 'Bersihkan Logbook?',
-        text: targetIds.length > 0 ? `Menghapus ${targetIds.length} catatan terfilter.` : 'Menghapus SELURUH catatan logbook.',
+        text: clearAll ? 'Menghapus SELURUH catatan logbook.' : `Menghapus ${targetIds.length} catatan terfilter dari Logbook server.`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
@@ -2051,7 +2099,7 @@
           renderLogbookTable();
           updateLogCountBadge();
 
-          await runBackendMutation('clearLogbook', { idsToDelete: targetIds }, 'Logbook berhasil dibersihkan');
+          await runBackendMutation('clearLogbook', { idsToDelete: targetIds, clearAll: clearAll }, 'Logbook berhasil dibersihkan');
         }
       });
     }
