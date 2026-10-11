@@ -615,6 +615,12 @@
     let adminPasswordVal = 'bnbzipper'; // fallback tampilan saja; validasi tetap di server
     let penerimaPasswordVal = 'novita'; // fallback tampilan saja; validasi tetap di server
     let verifiedAdminPassword = ''; // hanya di memori selama sesi halaman
+    let adminSessionToken = '';
+    let penerimaSessionToken = '';
+
+    function getSessionTokenForCurrentRole() {
+      return currentRole === 'admin' ? adminSessionToken : penerimaSessionToken;
+    }
 
     let documentsData = [];
     let samplesData = [];
@@ -771,12 +777,18 @@
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
+            token: getSessionTokenForCurrentRole(),
             action: isTargetAdmin ? 'verifyAdminPassword' : 'verifyPenerimaPassword',
             password: inputPass
           })
         });
-        if (result && result.success === true && result.status === 'success') {
-          if (isTargetAdmin) verifiedAdminPassword = inputPass;
+        if (result && result.success === true && result.status === 'success' && result.token) {
+          if (isTargetAdmin) {
+            verifiedAdminPassword = inputPass;
+            adminSessionToken = result.token;
+          } else {
+            penerimaSessionToken = result.token;
+          }
           closePasswordModal();
           setRoleState(targetPendingRole, true);
           showToast(`Berhasil masuk sebagai ${isTargetAdmin ? 'Admin' : 'Penerima'}`, 'success');
@@ -1069,7 +1081,7 @@
         fetch(GAS_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'saveSample', sample: sampleItem })
+          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'saveSample', sample: sampleItem })
         }).catch(() => {});
       }
 
@@ -1105,7 +1117,7 @@
             fetch(GAS_API_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ action: 'deleteSample', id: id })
+              body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'deleteSample', id: id })
             }).catch(() => {});
           }
 
@@ -1365,7 +1377,7 @@
         fetch(GAS_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'updateDocumentDetails', id: id, document: updatedDoc })
+          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'updateDocumentDetails', id: id, document: updatedDoc })
         }).catch(() => {});
       }
 
@@ -1623,7 +1635,7 @@
         fetch(GAS_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'createBerkasBatch', items: newItems })
+          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'createBerkasBatch', items: newItems })
         }).catch(() => {});
       }
     }
@@ -1659,7 +1671,7 @@
         fetch(GAS_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'updatePenerimaStatusBatch', updates: batchPayload })
+          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'updatePenerimaStatusBatch', updates: batchPayload })
         }).catch(() => {});
       }
     }
@@ -1692,7 +1704,7 @@
             fetch(GAS_API_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ action: 'deleteDocument', id: doc.id, noPo: doc.noPo || doc.po })
+              body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'deleteDocument', id: doc.id, noPo: doc.noPo || doc.po })
             }).catch(() => {});
           }
           showToast('Berkas berhasil dihapus', 'success');
@@ -1727,7 +1739,7 @@
             fetch(GAS_API_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ action: 'deleteGroupDate', ids: idsToDelete, pos: posToDelete })
+              body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'deleteGroupDate', ids: idsToDelete, pos: posToDelete })
             }).catch(() => {});
           }
           showToast(`Semua data tanggal ${date} berhasil dihapus`, 'success');
@@ -1753,6 +1765,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
+            token: getSessionTokenForCurrentRole(),
             action: 'updatePenerimaStatus',
             id: doc.id,
             noPo: doc.noPo || doc.po,
@@ -1779,6 +1792,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
+              token: getSessionTokenForCurrentRole(),
               action: 'updatePenerimaStatus',
               id: doc.id,
               noPo: doc.noPo || doc.po,
@@ -1806,7 +1820,7 @@
         fetch(GAS_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'unlockDocument', id: doc.id, noPo: doc.noPo || doc.po })
+          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'unlockDocument', id: doc.id, noPo: doc.noPo || doc.po })
         }).catch(() => {});
       }
     }
@@ -1944,7 +1958,7 @@
         fetch(GAS_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'addLogbookEntry', logData: newLog })
+          body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'addLogbookEntry', logData: newLog })
         }).catch(() => {});
       }
     }
@@ -2020,7 +2034,7 @@
             fetch(GAS_API_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ action: 'clearLogbook', idsToDelete: targetIds })
+              body: JSON.stringify({ token: getSessionTokenForCurrentRole(), action: 'clearLogbook', idsToDelete: targetIds })
             }).catch(() => {});
           }
           showToast('Logbook dibersihkan', 'success');
@@ -2114,6 +2128,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
+            token: getSessionTokenForCurrentRole(),
             action: 'changePassword',
             targetRole: role,
             currentAdminPassword: verifiedAdminPassword,
