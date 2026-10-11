@@ -68,6 +68,35 @@
       text-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
     }
 
+    /* SIPENBER Penyerahan Sample UI refinements */
+    .sample-modal-scroll {
+      min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: #475569 #1e293b;
+      overscroll-behavior: contain;
+    }
+    .sample-modal-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .sample-modal-scroll::-webkit-scrollbar-track { background: #1e293b; border-radius: 8px; }
+    .sample-modal-scroll::-webkit-scrollbar-thumb {
+      background: #475569; border: 2px solid #1e293b; border-radius: 8px;
+    }
+    .sample-modal-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    #sampleKode { box-sizing: border-box; outline: none !important; box-shadow: none; }
+    #sampleKode:focus { outline: none !important; border-color: #0d9488; box-shadow: 0 0 0 1px rgba(13,148,136,.35); }
+    .sample-dashboard-table { width: 100%; min-width: 1320px; table-layout: fixed; border-collapse: collapse; }
+    .sample-dashboard-table th, .sample-dashboard-table td { overflow-wrap: anywhere; vertical-align: top; }
+    .sample-dashboard-table th:nth-child(1), .sample-dashboard-table td:nth-child(1) { width: 48px; }
+    .sample-dashboard-table th:nth-child(2), .sample-dashboard-table td:nth-child(2) { width: 155px; }
+    .sample-dashboard-table th:nth-child(3), .sample-dashboard-table td:nth-child(3) { width: 150px; }
+    .sample-dashboard-table th:nth-child(4), .sample-dashboard-table td:nth-child(4) { width: 205px; }
+    .sample-dashboard-table th:nth-child(5), .sample-dashboard-table td:nth-child(5) { width: 185px; }
+    .sample-dashboard-table th:nth-child(6), .sample-dashboard-table td:nth-child(6) { width: 135px; }
+    .sample-dashboard-table th:nth-child(7), .sample-dashboard-table td:nth-child(7) { width: 340px; }
+    .sample-dashboard-table th:nth-child(8), .sample-dashboard-table td:nth-child(8) { width: 125px; }
+    .sample-dashboard-table th:nth-child(9), .sample-dashboard-table td:nth-child(9) { width: 105px; }
+    .sample-note-preview { overflow-wrap: anywhere; word-break: normal; white-space: normal; }
+    .sample-pair-label { display:block; margin-bottom:2px; font-size:9px; line-height:1.25; font-weight:700; letter-spacing:.04em; color:#94a3b8; text-transform:uppercase; }
+
     @media print {
       body > *:not(#printArea) { display: none !important; }
       body { background: #ffffff !important; color: #000000 !important; }
@@ -373,7 +402,7 @@
 
   <!-- MODAL: EDIT DOKUMEN (ADMIN ONLY) -->
   <div id="modalEditDoc" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 no-print">
-    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full p-6 shadow-2xl flex flex-col max-h-[90vh]">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-xl w-full p-5 sm:p-6 shadow-2xl flex flex-col max-h-[90vh] max-h-[88dvh]">
       <div class="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
         <div class="flex items-center gap-2">
           <i class="fa-solid fa-pen-to-square text-orange-400 text-lg"></i>
@@ -384,7 +413,7 @@
 
       <input type="hidden" id="editDocId">
 
-      <div class="space-y-3 overflow-y-auto pr-1 flex-1">
+      <div class="sample-modal-scroll space-y-3 overflow-y-auto overflow-x-hidden pr-2 flex-1">
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Tanggal Berkas (DD/MM/YYYY)</label>
           <input type="text" id="editDocTanggal" placeholder="DD/MM/YYYY" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-orange-500">
@@ -446,7 +475,7 @@
       <div class="space-y-3 overflow-y-auto pr-1 flex-1">
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Kode Sample (otomatis)</label>
-          <input type="text" id="sampleKode" readonly placeholder="Dibuat otomatis saat disimpan" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-teal-300 font-mono">
+          <input type="text" id="sampleKode" readonly aria-readonly="true" placeholder="Dibuat otomatis saat disimpan" class="block w-full min-w-0 max-w-full box-border bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-teal-300 font-mono focus:outline-none focus:ring-0 focus:border-teal-500">
           <p class="text-[10px] text-slate-500 mt-1">Kode baru dibuat oleh server dan tidak dapat diubah manual.</p>
         </div>
         <div>
@@ -1411,22 +1440,19 @@
 
       updateFilterSampleDateOptions();
 
-      // FILTER HANYA DATA SAMPLE SAH (HINDARI PENYUSUPAN DATA BERKAS)
+      // Hanya record sample valid yang ditampilkan.
       const validSamples = samplesData.filter(s => s && s.namaPenyerah && s.namaPenyerah !== 'undefined');
-
       const filtered = validSamples.filter(sample => {
-        const penyerah = (sample.namaPenyerah || '').toLowerCase();
-        const barang = (sample.namaBarang || '').toLowerCase();
-        const ket = (sample.keterangan || '').toLowerCase();
-        const penerima = (sample.namaPenerima || '').toLowerCase();
-        const tujuan = (sample.tujuan || '').toLowerCase();
-        const kode = (sample.kodeSample || sample.id || '').toLowerCase();
+        const penyerah = String(sample.namaPenyerah || '').toLowerCase();
+        const barang = String(sample.namaBarang || '').toLowerCase();
+        const ket = String(sample.keterangan || '').toLowerCase();
+        const penerima = String(sample.namaPenerima || '').toLowerCase();
+        const tujuan = String(sample.tujuan || '').toLowerCase();
+        const kode = String(sample.kodeSample || sample.id || '').toLowerCase();
         const status = sample.statusPenyerahan || 'Sudah Diserahkan';
-
         const matchSearch = !searchVal || penyerah.includes(searchVal) || barang.includes(searchVal) || ket.includes(searchVal) || penerima.includes(searchVal) || tujuan.includes(searchVal) || kode.includes(searchVal);
         const matchDate = !filterDate || sample.tanggalPenyerahan === filterDate;
         const matchStatus = !filterStatus || status === filterStatus;
-
         return matchSearch && matchDate && matchStatus;
       });
 
@@ -1440,87 +1466,106 @@
 
       emptyState.classList.add('hidden');
       emptyState.classList.remove('flex');
-
       const isAdmin = currentRole === 'admin';
-
       let rowsHtml = '';
+
       filtered.forEach((item, index) => {
         const photoCount = (getSafeSamplePhotoSrc(item.fotoUrl) ? 1 : 0) + (getSafeSamplePhotoSrc(item.fotoUrl2) ? 1 : 0);
+        const kodeSample = item.kodeSample || item.id || '-';
+        const tanggal = item.tanggalPenyerahan || '-';
+        const namaBarang = item.namaBarang || '-';
+        const jumlah = `${String(item.jumlah || 1)} ${String(item.satuan || 'Pcs')}`;
+        const penerima = item.namaPenerima || '-';
+        const tujuan = item.tujuan || '-';
+        const status = item.statusPenyerahan || 'Sudah Diserahkan';
+        const note = String(item.keterangan || '').trim();
+        const notePreview = note.length > 190 ? `${note.slice(0, 190).trimEnd()}…` : (note || '-');
+        const statusClass = status === 'Sudah Diserahkan'
+          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+          : (status === 'Disiapkan' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-red-500/15 text-red-300 border-red-500/30');
 
         rowsHtml += `
           <tr class="hover:bg-slate-700/30 transition border-b border-slate-700/50">
-            <td class="py-3 px-4 text-center text-xs font-semibold text-slate-500">${index + 1}</td>
-            <td class="py-3 px-4 font-bold text-teal-400 font-mono whitespace-nowrap">${escapeHtml(item.kodeSample || item.id)}</td>
-            <td class="py-3 px-4 font-bold text-slate-300 font-mono whitespace-nowrap">${escapeHtml(item.tanggalPenyerahan)}</td>
-            <td class="py-3 px-4 font-semibold text-slate-100">${escapeHtml(item.namaPenyerah)}</td>
-            <td class="py-3 px-4 font-medium text-teal-300 min-w-[180px]">${escapeHtml(item.namaBarang)}</td>
-            <td class="py-3 px-4 text-center whitespace-nowrap">${escapeHtml(String(item.jumlah || 1))} ${escapeHtml(item.satuan || 'Pcs')}</td>
-            <td class="py-3 px-4 text-xs text-slate-200">${escapeHtml(item.namaPenerima || '-')}</td>
-            <td class="py-3 px-4 text-xs text-slate-300">${escapeHtml(item.tujuan || '-')}</td>
-            <td class="py-3 px-4 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-[10px] font-semibold ${((item.statusPenyerahan || 'Sudah Diserahkan') === 'Sudah Diserahkan') ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : ((item.statusPenyerahan || 'Sudah Diserahkan') === 'Disiapkan' ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-red-500/15 text-red-300 border border-red-500/30')}">${escapeHtml(item.statusPenyerahan || 'Sudah Diserahkan')}</span></td>
-            <td class="py-3 px-4 text-xs text-slate-300 min-w-[180px]">${escapeHtml(item.keterangan || '-')}</td>
-            <td class="py-3 px-4 text-center whitespace-nowrap">
-              ${photoCount > 0 ? `
-                <button onclick="openPhotoLightbox(${safeJsArg(item.id)})" class="px-2.5 py-1 bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-600 hover:text-white rounded-lg text-xs font-medium flex items-center gap-1.5 mx-auto transition">
-                  <i class="fa-solid fa-image"></i> Lihat Foto (${photoCount})
-                </button>
-              ` : `
-                <span class="text-xs text-slate-500">Tanpa Foto</span>
-              `}
+            <td class="py-3 px-3 text-center text-xs font-semibold text-slate-500">${index + 1}</td>
+            <td class="py-3 px-3">
+              <span class="block font-bold text-teal-300 font-mono text-xs">${escapeHtml(kodeSample)}</span>
+              <span class="block mt-1 text-[11px] text-slate-400 font-mono">${escapeHtml(tanggal)}</span>
             </td>
-            <td class="py-3 px-4 text-center whitespace-nowrap">
+            <td class="py-3 px-3 font-semibold text-slate-100">${escapeHtml(item.namaPenyerah || '-')}</td>
+            <td class="py-3 px-3">
+              <span class="block font-semibold text-teal-300">${escapeHtml(namaBarang)}</span>
+              <span class="block mt-1 text-xs text-slate-400">Jumlah: ${escapeHtml(jumlah)}</span>
+            </td>
+            <td class="py-3 px-3 text-xs text-slate-200">
+              <div><span class="sample-pair-label">Penerima</span>${escapeHtml(penerima)}</div>
+              <div class="mt-2"><span class="sample-pair-label">Tujuan</span>${escapeHtml(tujuan)}</div>
+            </td>
+            <td class="py-3 px-3 whitespace-nowrap">
+              <span class="inline-block px-2 py-1 rounded-full border text-[10px] font-semibold ${statusClass}">${escapeHtml(status)}</span>
+            </td>
+            <td class="py-3 px-3 text-xs text-slate-300">
+              <div class="sample-note-preview">${escapeHtml(notePreview)}</div>
+              ${note.length > 190 ? `<button type="button" onclick="viewSampleDetails(${safeJsArg(item.id)})" class="mt-2 text-teal-300 hover:text-teal-200 underline underline-offset-2 text-[11px] font-semibold">Lihat keterangan lengkap</button>` : ''}
+            </td>
+            <td class="py-3 px-3 text-center whitespace-nowrap">
+              ${photoCount > 0 ? `
+                <button onclick="openPhotoLightbox(${safeJsArg(item.id)})" class="px-2 py-1 bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-600 hover:text-white rounded-lg text-xs font-medium inline-flex items-center gap-1.5 mx-auto transition">
+                  <i class="fa-solid fa-image"></i> Foto (${photoCount})
+                </button>
+              ` : `<span class="text-xs text-slate-500">Tanpa Foto</span>`}
+            </td>
+            <td class="py-3 px-3 text-center whitespace-nowrap">
               ${isAdmin ? `
                 <div class="flex items-center justify-center gap-1.5">
-                  <button onclick="openEditSampleModal(${safeJsArg(item.id)})" title="Edit Sample" class="px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded text-xs transition">
-                    <i class="fa-solid fa-pen-to-square"></i>
-                  </button>
-                  <button onclick="deleteSampleRecord(${safeJsArg(item.id)})" title="Hapus Sample" class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white rounded text-xs transition">
-                    <i class="fa-solid fa-trash-can"></i>
-                  </button>
+                  <button onclick="openEditSampleModal(${safeJsArg(item.id)})" title="Edit Sample" aria-label="Edit sample" class="px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded text-xs transition"><i class="fa-solid fa-pen-to-square"></i></button>
+                  <button onclick="deleteSampleRecord(${safeJsArg(item.id)})" title="Hapus Sample" aria-label="Hapus sample" class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white rounded text-xs transition"><i class="fa-solid fa-trash-can"></i></button>
                 </div>
-              ` : `
-                <span class="text-xs text-slate-500"><i class="fa-solid fa-eye"></i> View Only</span>
-              `}
+              ` : `<span class="text-xs text-slate-500"><i class="fa-solid fa-eye"></i> Lihat saja</span>`}
             </td>
-          </tr>
-        `;
+          </tr>`;
       });
 
       container.innerHTML = `
         <div class="bg-slate-900/90 px-5 py-3 border-b border-slate-700 flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <i class="fa-solid fa-vial text-teal-400"></i>
-            <h3 class="font-bold text-sm text-white">Daftar Penyerahan Sample Barang</h3>
-          </div>
+          <div class="flex items-center gap-2"><i class="fa-solid fa-vial text-teal-400"></i><h3 class="font-bold text-sm text-white">Daftar Penyerahan Sample Barang</h3></div>
           <span class="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-teal-500/30">${filtered.length} Sample</span>
         </div>
-
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm text-slate-300">
+          <table class="sample-dashboard-table w-full text-left text-sm text-slate-300">
             <thead class="bg-slate-900/50 uppercase text-[11px] font-semibold text-slate-400 border-b border-slate-700/80">
               <tr>
-                <th class="py-3 px-4 w-12 text-center">NO</th>
-                <th class="py-3 px-4">KODE SAMPLE</th>
-                <th class="py-3 px-4">TGL PENYERAHAN</th>
-                <th class="py-3 px-4">NAMA PENYERAH</th>
-                <th class="py-3 px-4">NAMA BARANG / SAMPLE</th>
-                <th class="py-3 px-4 text-center">JUMLAH</th>
-                <th class="py-3 px-4">PENERIMA / PERUSAHAAN</th>
-                <th class="py-3 px-4">TUJUAN</th>
-                <th class="py-3 px-4">STATUS</th>
-                <th class="py-3 px-4">KETERANGAN</th>
-                <th class="py-3 px-4 text-center">FOTO SAMPLE</th>
-                <th class="py-3 px-4 text-center">AKSI / STATUS</th>
+                <th class="py-3 px-3 text-center">NO</th>
+                <th class="py-3 px-3">KODE / TANGGAL</th>
+                <th class="py-3 px-3">NAMA PENYERAH</th>
+                <th class="py-3 px-3">SAMPLE / JUMLAH</th>
+                <th class="py-3 px-3">PENERIMA / TUJUAN</th>
+                <th class="py-3 px-3">STATUS</th>
+                <th class="py-3 px-3">KETERANGAN</th>
+                <th class="py-3 px-3 text-center">FOTO</th>
+                <th class="py-3 px-3 text-center">AKSI</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-700/50">
-              ${rowsHtml}
-            </tbody>
+            <tbody class="divide-y divide-slate-700/50">${rowsHtml}</tbody>
           </table>
-        </div>
-      `;
-
+        </div>`;
       updateSampleStats();
+    }
+
+    function viewSampleDetails(sampleId) {
+      if (!checkAuth()) return;
+      const sample = samplesData.find(item => String(item.id) === String(sampleId));
+      if (!sample) {
+        showToast('Data sample tidak ditemukan. Segarkan data lalu coba kembali.', 'warning');
+        return;
+      }
+      const fullNote = String(sample.keterangan || '').trim() || '-';
+      Swal.fire({
+        title: 'Keterangan Sample',
+        html: `<div style="text-align:left;overflow-wrap:anywhere;max-height:55vh;overflow:auto;line-height:1.6"><div style="font-weight:700;margin-bottom:8px">${escapeHtml(sample.namaBarang || 'Sample')}</div><div style="white-space:pre-wrap">${escapeHtml(fullNote).replace(/\r?\n/g, '<br>')}</div></div>`,
+        confirmButtonText: 'Tutup',
+        confirmButtonColor: '#0d9488',
+        width: 'min(720px, 92vw)'
+      });
     }
 
     function getFilteredSamplesForActions() {
@@ -1578,34 +1623,74 @@
         showToast('Tidak ada data sample sesuai filter untuk dicetak.', 'warning');
         return;
       }
+
       const printArea = document.getElementById('printArea');
       const today = new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
-      const bodyRows = rows.map((item, index) => `
-        <tr>
-          <td style="text-align:center">${index + 1}</td>
-          <td>${escapeHtml(item.kodeSample || item.id)}</td>
-          <td>${escapeHtml(item.tanggalPenyerahan)}</td>
-          <td>${escapeHtml(item.namaPenyerah)}</td>
-          <td>${escapeHtml(item.namaBarang)}</td>
-          <td style="text-align:center">${escapeHtml(String(item.jumlah || 1))} ${escapeHtml(item.satuan || 'Pcs')}</td>
-          <td>${escapeHtml(item.namaPenerima || '-')}</td>
-          <td>${escapeHtml(item.tujuan || '-')}</td>
-          <td>${escapeHtml(item.statusPenyerahan || 'Sudah Diserahkan')}</td>
-          <td>${escapeHtml(item.keterangan || '-')}</td>
-        </tr>`).join('');
+      const bodyRows = rows.map((item, index) => {
+        const status = item.statusPenyerahan || 'Sudah Diserahkan';
+        const note = escapeHtml(String(item.keterangan || '-')).replace(/\r?\n/g, '<br>');
+        return `
+          <tr>
+            <td class="print-center">${index + 1}</td>
+            <td><strong class="print-code">${escapeHtml(item.kodeSample || item.id || '-')}</strong><div class="print-muted">${escapeHtml(item.tanggalPenyerahan || '-')}</div></td>
+            <td>${escapeHtml(item.namaPenyerah || '-')}</td>
+            <td><strong>${escapeHtml(item.namaBarang || '-')}</strong><div class="print-muted">Jumlah: ${escapeHtml(String(item.jumlah || 1))} ${escapeHtml(item.satuan || 'Pcs')}</div></td>
+            <td><div><strong>Penerima:</strong> ${escapeHtml(item.namaPenerima || '-')}</div><div class="print-gap"><strong>Tujuan:</strong> ${escapeHtml(item.tujuan || '-')}</div></td>
+            <td>${escapeHtml(status)}</td>
+            <td class="print-note">${note}</td>
+          </tr>`;
+      }).join('');
+
       printArea.innerHTML = `
-        <div style="font-family:Arial,sans-serif;color:#111;background:#fff;padding:8px">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:12px">
-            <div><h2 style="margin:0;font-size:18px">LAPORAN PENYERAHAN SAMPLE</h2><p style="margin:5px 0 0;font-size:11px">SIPENBER — Sistem Penerimaan Berkas &amp; Sample</p></div>
-            <div style="text-align:right;font-size:10px">Dicetak: ${escapeHtml(today)}<br>Total: ${rows.length} record</div>
+        <div class="sample-print-wrap">
+          <div class="sample-print-header">
+            <div><h2>LAPORAN PENYERAHAN SAMPLE</h2><p>SIPENBER — Sistem Penerimaan Berkas &amp; Sample</p></div>
+            <div class="sample-print-meta">Dicetak: ${escapeHtml(today)}<br>Total: ${rows.length} record</div>
           </div>
-          <table style="width:100%;border-collapse:collapse;font-size:9px">
-            <thead><tr style="background:#eee"><th>No</th><th>Kode Sample</th><th>Tanggal</th><th>Penyerah</th><th>Nama Sample</th><th>Jumlah</th><th>Penerima</th><th>Tujuan</th><th>Status</th><th>Keterangan</th></tr></thead>
+          <table class="sample-print-table">
+            <colgroup><col style="width:4%"><col style="width:12%"><col style="width:12%"><col style="width:15%"><col style="width:14%"><col style="width:12%"><col style="width:31%"></colgroup>
+            <thead><tr><th>No</th><th>Kode / Tanggal</th><th>Penyerah</th><th>Sample / Jumlah</th><th>Penerima / Tujuan</th><th>Status</th><th>Keterangan Lengkap</th></tr></thead>
             <tbody>${bodyRows}</tbody>
           </table>
+          <p class="sample-print-footer">Dokumen dicetak dari SIPENBER. Pastikan data telah diverifikasi sebelum digunakan sebagai bukti resmi.</p>
         </div>`;
+
+      // Apply landscape only to this sample report; other print workflows keep their original settings.
+      const previousStyle = document.getElementById('samplePrintPageStyle');
+      if (previousStyle) previousStyle.remove();
+      const printStyle = document.createElement('style');
+      printStyle.id = 'samplePrintPageStyle';
+      printStyle.textContent = `
+        @page { size: A4 landscape; margin: 8mm; }
+        @media print {
+          body { margin:0 !important; padding:0 !important; }
+          #printArea { position:static !important; width:100% !important; margin:0 !important; padding:0 !important; }
+          #printArea .sample-print-wrap { width:100% !important; padding:0 !important; margin:0 !important; color:#111 !important; font-family:Arial,sans-serif !important; font-size:8pt !important; }
+          #printArea .sample-print-header { display:flex !important; justify-content:space-between !important; align-items:flex-start !important; gap:12px !important; border-bottom:2px solid #111 !important; padding-bottom:7px !important; margin-bottom:8px !important; }
+          #printArea .sample-print-header h2 { margin:0 !important; font-size:15pt !important; line-height:1.2 !important; font-weight:700 !important; }
+          #printArea .sample-print-header p { margin:4px 0 0 !important; font-size:8pt !important; }
+          #printArea .sample-print-meta { text-align:right !important; font-size:7.5pt !important; white-space:nowrap !important; }
+          #printArea .sample-print-table { width:100% !important; table-layout:fixed !important; border-collapse:collapse !important; margin-top:6px !important; font-size:7.5pt !important; }
+          #printArea .sample-print-table th, #printArea .sample-print-table td { border:1px solid #111 !important; padding:4px 5px !important; font-size:7.5pt !important; line-height:1.25 !important; color:#111 !important; text-align:left !important; vertical-align:top !important; white-space:normal !important; overflow-wrap:anywhere !important; word-break:normal !important; }
+          #printArea .sample-print-table th { background:#eee !important; font-weight:700 !important; }
+          #printArea .sample-print-table .print-center { text-align:center !important; }
+          #printArea .sample-print-table .print-code { font-size:7pt !important; }
+          #printArea .sample-print-table .print-muted { color:#444 !important; font-size:7pt !important; margin-top:3px !important; }
+          #printArea .sample-print-table .print-gap { margin-top:5px !important; }
+          #printArea .sample-print-table .print-note { white-space:pre-wrap !important; overflow-wrap:anywhere !important; }
+          #printArea .sample-print-table thead { display:table-header-group !important; }
+          #printArea .sample-print-table tr { break-inside:avoid; page-break-inside:avoid; }
+          #printArea .sample-print-footer { margin-top:7px !important; color:#444 !important; font-size:7pt !important; }
+        }`;
+      document.head.appendChild(printStyle);
+      const cleanPrintStyle = () => {
+        const activeStyle = document.getElementById('samplePrintPageStyle');
+        if (activeStyle) activeStyle.remove();
+        window.removeEventListener('afterprint', cleanPrintStyle);
+      };
+      window.addEventListener('afterprint', cleanPrintStyle);
       window.print();
-      showToast(`Laporan ${rows.length} sample siap dicetak.`, 'success');
+      showToast(`Laporan ${rows.length} sample siap dicetak. Gunakan orientasi Landscape jika dialog printer meminta konfirmasi.`, 'success');
     }
 
     function updateSampleStats() {
