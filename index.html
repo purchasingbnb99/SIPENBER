@@ -255,7 +255,7 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <button onclick="fetchDocumentsFromBackend()" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm flex items-center justify-center gap-2 transition">
+          <button onclick="refreshBerkasData()" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm flex items-center justify-center gap-2 transition">
             <i class="fa-solid fa-rotate"></i> Refresh
           </button>
 
@@ -272,8 +272,8 @@
         <div class="w-16 h-16 rounded-full bg-slate-700/50 flex items-center justify-center text-slate-500 text-2xl mb-3">
           <i class="fa-solid fa-folder-open"></i>
         </div>
-        <p class="text-slate-300 font-medium">Tidak Ada Berkas Ditemukan</p>
-        <p class="text-xs text-slate-500 mt-1">Coba sesuaikan kata kunci pencarian atau filter status.</p>
+        <p id="emptyStateTitle" class="text-slate-300 font-medium">Tidak Ada Berkas Ditemukan</p>
+        <p id="emptyStateDescription" class="text-xs text-slate-500 mt-1">Coba sesuaikan kata kunci pencarian atau filter status.</p>
       </div>
 
     </div>
@@ -713,10 +713,13 @@
     const LOCAL_LOGS_KEY = 'SIPENBER_LOGS_DATA_V2';
     const LOCAL_PASS_KEY = 'SIPENBER_PASSWORDS';
 
+    let publicBerkasLoaded = false;
+    let publicBerkasLoadFailed = false;
+
     window.onload = () => {
       loadSavedPasswords();
-      // Data backend tidak diambil/dipulihkan dari cache lokal sebelum login.
-      // Setelah autentikasi berhasil, data dibaca melalui POST bertoken.
+      // Sesuai kebijakan pemilik: seluruh data Berkas langsung dibaca tanpa login.
+      // Sample, foto privat, Logbook, dan semua operasi perubahan tetap membutuhkan sesi.
       documentsData = [];
       samplesData = [];
       logsData = [];
@@ -724,6 +727,7 @@
       renderTable();
       renderSampleTable();
       updateLogCountBadge();
+      fetchPublicDocumentsFromBackend();
     };
 
     function switchModuleTab(tab) {
@@ -1028,10 +1032,60 @@
       }
     }
 
+    async function fetchPublicDocumentsFromBackend(showErrorToast = false) {
+      if (!GAS_API_URL || !GAS_API_URL.trim() || GAS_API_URL.includes('ISI_DENGAN_URL')) {
+        publicBerkasLoadFailed = true;
+        renderTable();
+        updateGasStatusBadge(false);
+        if (showErrorToast) showToast('URL backend SIPENBER belum dikonfigurasi.', 'error');
+        return false;
+      }
+
+      try {
+        const data = await safeFetchJson(`${GAS_API_URL}?action=getBerkas`);
+        if (!Array.isArray(data)) {
+          throw new Error((data && data.message) || 'Respons data berkas publik tidak valid.');
+        }
+        documentsData = sanitizeUniqueIds(data);
+        publicBerkasLoaded = true;
+        publicBerkasLoadFailed = false;
+        saveLocalDocs();
+        renderTable();
+        updateGasStatusBadge(true);
+        return true;
+      } catch (error) {
+        publicBerkasLoadFailed = documentsData.length === 0;
+        renderTable();
+        updateGasStatusBadge(false);
+        if (showErrorToast) showToast('Gagal memuat data berkas: ' + (error.message || 'Periksa koneksi backend.'), 'error');
+        return false;
+      }
+    }
+
+    async function refreshBerkasData() {
+      const token = getSessionTokenForCurrentRole();
+      if (token && isRoleSessionActive(currentRole)) {
+        try {
+          await fetchDocumentsFromBackend(token);
+          publicBerkasLoaded = true;
+          publicBerkasLoadFailed = false;
+          updateGasStatusBadge(true);
+          showToast('Data berkas berhasil diperbarui.', 'success');
+          return true;
+        } catch (error) {
+          showToast('Gagal memperbarui data berkas: ' + (error.message || 'Kesalahan server.'), 'error');
+          return false;
+        }
+      }
+      return fetchPublicDocumentsFromBackend(true);
+    }
+
     function fetchDocumentsFromBackend(token) {
       return backendPost('getBerkas', token).then(data => {
         if (!Array.isArray(data)) throw new Error('Respons data berkas dari server tidak valid.');
         documentsData = sanitizeUniqueIds(data);
+        publicBerkasLoaded = true;
+        publicBerkasLoadFailed = false;
         saveLocalDocs();
         renderTable();
         return true;
@@ -2035,12 +2089,27 @@
       if (filtered.length === 0) {
         emptyState.classList.remove('hidden');
         emptyState.classList.add('flex');
+        const emptyTitle = document.getElementById('emptyStateTitle');
+        const emptyDescription = document.getElementById('emptyStateDescription');
+        if (!publicBerkasLoaded) {
+          if (emptyTitle) emptyTitle.textContent = publicBerkasLoadFailed ? 'Gagal Memuat Data Berkas' : 'Memuat Data Berkas...';
+          if (emptyDescription) emptyDescription.textContent = publicBerkasLoadFailed
+            ? 'Data belum dipastikan kosong. Periksa koneksi backend lalu tekan Refresh.'
+            : 'Mengambil data terbaru dari database SIPENBER.';
+        } else {
+          if (emptyTitle) emptyTitle.textContent = 'Tidak Ada Berkas Ditemukan';
+          if (emptyDescription) emptyDescription.textContent = 'Coba sesuaikan kata kunci pencarian atau filter status.';
+        }
         updateDashboardStats();
         return;
       }
 
       emptyState.classList.add('hidden');
       emptyState.classList.remove('flex');
+      const emptyTitle = document.getElementById('emptyStateTitle');
+      const emptyDescription = document.getElementById('emptyStateDescription');
+      if (emptyTitle) emptyTitle.textContent = 'Tidak Ada Berkas Ditemukan';
+      if (emptyDescription) emptyDescription.textContent = 'Coba sesuaikan kata kunci pencarian atau filter status.';
 
       const groups = Object.create(null);
       filtered.forEach(item => {
@@ -2079,7 +2148,9 @@
               <td class="py-3 px-4 text-center">
                 <input type="checkbox" ${item.isChecked ? 'checked' : ''} 
                   onchange="toggleChecklist(${safeJsArg(item.id)}, ${safeJsArg(poVal)}, this.checked)"
-                  ${(!activeLoggedIn || (isLocked && !isAdmin)) ? 'disabled' : ''}
+                  ${(isLocked && !isAdmin) ? 'disabled' : ''}
+                  title="${!activeLoggedIn ? 'Login Staff/Penerima diperlukan untuk mengubah ceklis' : (isLocked && !isAdmin ? 'Berkas terkunci; hanya Admin yang dapat membuka kunci' : 'Ubah status penerimaan')}"
+                  aria-label="Status penerimaan ${escapeHtml(poVal)}"
                   class="w-4 h-4 accent-orange-500 rounded cursor-pointer disabled:cursor-not-allowed">
               </td>
               <td class="py-3 px-4 text-center">
