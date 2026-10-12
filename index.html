@@ -171,6 +171,17 @@
           </button>
         </div>
 
+        <!-- KUNCI SESI, LOGOUT, DAN BUKA KUNCI -->
+        <button id="btnLockSession" onclick="lockCurrentSession(false)" title="Kunci akses sementara; data tetap terlihat" class="hidden px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-950 text-xs font-semibold transition">
+          <i class="fa-solid fa-lock mr-1"></i> Kunci
+        </button>
+        <button id="btnLogoutSession" onclick="logoutCurrentSession()" title="Akhiri sesi login" class="hidden px-2.5 py-1.5 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500 hover:text-white text-xs font-semibold transition">
+          <i class="fa-solid fa-right-from-bracket mr-1"></i> Logout
+        </button>
+        <button id="btnUnlockSession" onclick="unlockCurrentSession()" title="Masukkan password untuk melanjutkan pekerjaan" class="hidden px-2.5 py-1.5 rounded-lg bg-blue-600/20 text-blue-300 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-xs font-semibold transition">
+          <i class="fa-solid fa-lock-open mr-1"></i> Buka Kunci
+        </button>
+
         <!-- BUTTON CHANGE PASSWORD ADMIN -->
         <button id="btnChangePassNav" onclick="openChangePassModal()" class="hidden px-2.5 py-1.5 rounded-lg bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600 hover:text-white text-xs font-medium transition">
           <i class="fa-solid fa-key mr-1"></i> Ganti Password
@@ -694,6 +705,13 @@
     let adminSessionToken = '';
     let penerimaSessionToken = '';
 
+    // Sesi dapat dikunci tanpa menutup dashboard: data tetap terlihat, tindakan memerlukan login ulang.
+    let sessionIsLocked = false;
+    let lockedRole = '';
+    let idleLockTimer = null;
+    let lastSessionActivityAt = Date.now();
+    const SESSION_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // kunci otomatis setelah 5 menit tidak aktif
+
     function getSessionTokenForCurrentRole() {
       return currentRole === 'admin' ? adminSessionToken : penerimaSessionToken;
     }
@@ -728,6 +746,7 @@
       renderSampleTable();
       updateLogCountBadge();
       fetchPublicDocumentsFromBackend();
+      initializeSessionLockControls();
     };
 
     function switchModuleTab(tab) {
@@ -813,11 +832,21 @@
           activeRoleText.className = isAdmin
             ? 'font-bold text-orange-400 flex items-center gap-1'
             : 'font-bold text-emerald-400 flex items-center gap-1';
+        } else if (sessionIsLocked && lockedRole === currentRole) {
+          roleLabel.innerText = isAdmin ? 'Terkunci (Admin)' : 'Terkunci (Staff/Penerima)';
+          activeRoleText.className = 'font-bold text-amber-300 flex items-center gap-1';
         } else {
           roleLabel.innerText = isAdmin ? 'Belum Login (Admin)' : 'Belum Login (Staff/Penerima)';
           activeRoleText.className = 'font-bold text-amber-400 flex items-center gap-1';
         }
       }
+
+      const btnLock = document.getElementById('btnLockSession');
+      const btnLogout = document.getElementById('btnLogoutSession');
+      const btnUnlock = document.getElementById('btnUnlockSession');
+      if (btnLock) btnLock.classList.toggle('hidden', !activeLoggedIn);
+      if (btnLogout) btnLogout.classList.toggle('hidden', !activeLoggedIn);
+      if (btnUnlock) btnUnlock.classList.toggle('hidden', activeLoggedIn || !sessionIsLocked || lockedRole !== currentRole);
 
       const btnPen = document.getElementById('btnRolePenerima');
       const btnAdm = document.getElementById('btnRoleAdmin');
@@ -838,14 +867,138 @@
 
       renderTable();
       renderSampleTable();
+      updateSessionControlButtons();
+      if (activeLoggedIn) {
+        lastSessionActivityAt = Date.now();
+        resetIdleLockTimer();
+      } else {
+        clearIdleLockTimer();
+      }
+    }
+
+    function updateSessionControlButtons() {
+      const active = isRoleSessionActive(currentRole);
+      const btnLock = document.getElementById('btnLockSession');
+      const btnLogout = document.getElementById('btnLogoutSession');
+      const btnUnlock = document.getElementById('btnUnlockSession');
+      if (btnLock) btnLock.classList.toggle('hidden', !active);
+      if (btnLogout) btnLogout.classList.toggle('hidden', !active);
+      if (btnUnlock) btnUnlock.classList.toggle('hidden', active || !sessionIsLocked || lockedRole !== currentRole);
+    }
+
+    function initializeSessionLockControls() {
+      const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll', 'mousemove'];
+      activityEvents.forEach(eventName => {
+        document.addEventListener(eventName, handleSessionActivity, { passive: true });
+      });
+      document.addEventListener('visibilitychange', handleSessionVisibilityChange);
+      updateSessionControlButtons();
+    }
+
+    function handleSessionActivity() {
+      if (!isRoleSessionActive(currentRole)) return;
+      const now = Date.now();
+      // Batasi pembaruan timer saat mouse bergerak terus-menerus.
+      if (now - lastSessionActivityAt < 750) return;
+      lastSessionActivityAt = now;
+      resetIdleLockTimer();
+    }
+
+    function resetIdleLockTimer() {
+      clearIdleLockTimer();
+      if (!isRoleSessionActive(currentRole)) return;
+      idleLockTimer = setTimeout(() => {
+        lockCurrentSession(true);
+      }, SESSION_IDLE_TIMEOUT_MS);
+    }
+
+    function clearIdleLockTimer() {
+      if (idleLockTimer !== null) {
+        clearTimeout(idleLockTimer);
+        idleLockTimer = null;
+      }
+    }
+
+    function handleSessionVisibilityChange() {
+      if (document.visibilityState !== 'visible' || !isRoleSessionActive(currentRole)) return;
+      if (Date.now() - lastSessionActivityAt >= SESSION_IDLE_TIMEOUT_MS) {
+        lockCurrentSession(true);
+      } else {
+        resetIdleLockTimer();
+      }
+    }
+
+    async function revokeServerSession(token) {
+      if (!token || !GAS_API_URL || !GAS_API_URL.trim() || GAS_API_URL.includes('ISI_DENGAN_URL')) return false;
+      try {
+        const result = await safeFetchJson(GAS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'endSession', token: token })
+        });
+        return Boolean(result && result.status === 'success' && result.success === true);
+      } catch (error) {
+        return false;
+      }
+    }
+
+    async function lockCurrentSession(automatic = false) {
+      if (!isRoleSessionActive(currentRole)) return;
+      const roleToLock = currentRole;
+      const token = getSessionTokenForCurrentRole();
+      clearIdleLockTimer();
+
+      // Kunci UI seketika sebelum menunggu jaringan, supaya operasi baru tidak bisa dimulai saat permintaan pencabutan berjalan.
+      lockedRole = roleToLock;
+      sessionIsLocked = true;
+      adminSessionToken = '';
+      penerimaSessionToken = '';
+      verifiedAdminPassword = '';
+      isAdminLoggedIn = false;
+      isPenerimaLoggedIn = false;
+      setRoleState(roleToLock, false);
+
+      const serverRevoked = await revokeServerSession(token);
+      if (serverRevoked) {
+        showToast(automatic ? 'Sesi dikunci otomatis karena tidak aktif 5 menit. Data tetap terlihat.' : 'Akses dikunci. Data tetap terlihat; masukkan password untuk melanjutkan.', 'success');
+      } else {
+        showToast('Dashboard dikunci di browser, tetapi pencabutan sesi server belum terkonfirmasi. Periksa koneksi sebelum meninggalkan komputer.', 'warning');
+      }
+    }
+
+    async function logoutCurrentSession() {
+      const token = getSessionTokenForCurrentRole();
+      clearIdleLockTimer();
+
+      // Hapus kredensial lokal segera; dashboard publik tetap terlihat.
+      sessionIsLocked = false;
+      lockedRole = '';
+      adminSessionToken = '';
+      penerimaSessionToken = '';
+      verifiedAdminPassword = '';
+      isAdminLoggedIn = false;
+      isPenerimaLoggedIn = false;
+      setRoleState('penerima', false);
+
+      const serverRevoked = token ? await revokeServerSession(token) : true;
+      showToast(serverRevoked ? 'Logout berhasil. Data tetap terlihat, perubahan memerlukan login.' : 'Logout lokal berhasil, tetapi server belum mengonfirmasi pencabutan sesi. Periksa koneksi.', serverRevoked ? 'success' : 'warning');
+    }
+
+    function unlockCurrentSession() {
+      const roleToUnlock = sessionIsLocked && lockedRole ? lockedRole : currentRole;
+      openPasswordModal(roleToUnlock);
     }
 
     function openPasswordModal(role = 'penerima') {
       targetPendingRole = role;
       const isTargetAdmin = role === 'admin';
 
-      document.getElementById('modalPasswordTitle').innerText = isTargetAdmin ? 'Verifikasi Hak Akses Admin' : 'Verifikasi Hak Akses Penerima';
-      document.getElementById('modalPasswordDesc').innerText = isTargetAdmin ? 'Masukkan kata sandi Admin untuk melanjutkan' : 'Masukkan kata sandi Penerima untuk melanjutkan';
+      document.getElementById('modalPasswordTitle').innerText = sessionIsLocked && lockedRole === role
+        ? (isTargetAdmin ? 'Buka Kunci Sesi Admin' : 'Buka Kunci Sesi Staff/Penerima')
+        : (isTargetAdmin ? 'Verifikasi Hak Akses Admin' : 'Verifikasi Hak Akses Penerima');
+      document.getElementById('modalPasswordDesc').innerText = sessionIsLocked && lockedRole === role
+        ? 'Masukkan password untuk melanjutkan pekerjaan. Data tetap terlihat selama layar terkunci.'
+        : (isTargetAdmin ? 'Masukkan kata sandi Admin untuk melanjutkan' : 'Masukkan kata sandi Staff/Penerima untuk melanjutkan');
 
       const iconElem = document.getElementById('modalPassIcon');
       if (iconElem) {
@@ -906,6 +1059,9 @@
           } else {
             penerimaSessionToken = result.token;
           }
+          sessionIsLocked = false;
+          lockedRole = '';
+          lastSessionActivityAt = Date.now();
 
           closePasswordModal();
           setRoleState(roleToLogin, true);
